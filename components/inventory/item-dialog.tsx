@@ -103,6 +103,7 @@ export function ItemDialog({
           error={error}
           onCancel={onClose}
           submitLabel={isEditing ? "Save changes" : "Create item"}
+          isEditing={isEditing}
         />
       </DialogContent>
     </Dialog>

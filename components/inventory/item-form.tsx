@@ -31,6 +31,7 @@ interface ItemFormProps {
   error: string | null;
   onCancel: () => void;
   submitLabel?: string;
+  isEditing?: boolean;
 }
 
 function FieldError({ message }: { message?: string }) {
@@ -60,6 +61,7 @@ export function ItemForm({
   error,
   onCancel,
   submitLabel = "Save item",
+  isEditing = false,
 }: ItemFormProps) {
   const [isGeneratingSku, setIsGeneratingSku] = useState(false);
 
@@ -75,6 +77,22 @@ export function ItemForm({
   });
 
   const categoryValue = watch("category");
+  const retailPriceValue = watch("retailPrice");
+  const wholesalePriceValue = watch("wholesalePrice");
+  const specialPriceValue = watch("specialPrice");
+
+  const wholesaleExceedsRetail =
+    Number(wholesalePriceValue) > 0 &&
+    Number(retailPriceValue) > 0 &&
+    Number(wholesalePriceValue) > Number(retailPriceValue);
+
+  const specialExceedsRetail =
+    specialPriceValue !== null &&
+    specialPriceValue !== undefined &&
+    String(specialPriceValue) !== "" &&
+    Number(specialPriceValue) > 0 &&
+    Number(retailPriceValue) > 0 &&
+    Number(specialPriceValue) >= Number(retailPriceValue);
 
   async function handleAutoSku() {
     if (!categoryValue) return;
@@ -193,6 +211,11 @@ export function ItemForm({
             className="mt-1.5"
             {...register("wholesalePrice")}
           />
+          {wholesaleExceedsRetail && !errors.wholesalePrice && (
+            <p className="text-xs text-amber-600 mt-1">
+              Wholesale is higher than retail — is this intentional?
+            </p>
+          )}
           <FieldError message={errors.wholesalePrice?.message} />
         </div>
         <div>
@@ -207,24 +230,31 @@ export function ItemForm({
             {...register("specialPrice")}
           />
           <p className="text-[11px] text-slate-400 mt-1">Leave blank if not applicable</p>
+          {specialExceedsRetail && !errors.specialPrice && (
+            <p className="text-xs text-amber-600 mt-1">
+              Special price must be less than retail price
+            </p>
+          )}
           <FieldError message={errors.specialPrice?.message} />
         </div>
       </div>
 
       {/* Row 4 — Stock + Threshold + Supplier */}
-      <div className="grid grid-cols-3 gap-4">
-        <div>
-          <Label htmlFor="stockQty">Stock Quantity *</Label>
-          <Input
-            id="stockQty"
-            type="number"
-            min="0"
-            step="1"
-            className="mt-1.5"
-            {...register("stockQty")}
-          />
-          <FieldError message={errors.stockQty?.message} />
-        </div>
+      <div className={`grid gap-4 ${isEditing ? "grid-cols-2" : "grid-cols-3"}`}>
+        {!isEditing && (
+          <div>
+            <Label htmlFor="stockQty">Initial Stock Quantity *</Label>
+            <Input
+              id="stockQty"
+              type="number"
+              min="0"
+              step="1"
+              className="mt-1.5"
+              {...register("stockQty")}
+            />
+            <FieldError message={errors.stockQty?.message} />
+          </div>
+        )}
         <div>
           <Label htmlFor="lowStockThreshold">Low Stock Alert At *</Label>
           <Input

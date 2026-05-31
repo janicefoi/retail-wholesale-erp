@@ -2,8 +2,18 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { ItemSchema, type ItemFormValues } from "@/lib/validations/inventory";
+
+async function requireManager(): Promise<{ success: false; error: string } | null> {
+  const session = await auth();
+  if (!session?.user?.id) return { success: false, error: "Unauthorized" };
+  if (session.user.role === "CASHIER") {
+    return { success: false, error: "You don't have permission to modify inventory." };
+  }
+  return null;
+}
 
 type ActionResult<T = void> =
   | { success: true; data?: T }
@@ -52,6 +62,9 @@ export async function getItems(filters?: ItemFilters) {
 // ── Items — write ──────────────────────────────────────────────────────────
 
 export async function createItem(data: ItemFormValues): Promise<ActionResult> {
+  const denied = await requireManager();
+  if (denied) return denied;
+
   const parsed = ItemSchema.safeParse(data);
   if (!parsed.success) {
     return { success: false, error: parsed.error.errors[0].message };
@@ -72,12 +85,17 @@ export async function updateItem(
   id: string,
   data: ItemFormValues
 ): Promise<ActionResult> {
+  const denied = await requireManager();
+  if (denied) return denied;
+
   const parsed = ItemSchema.safeParse(data);
   if (!parsed.success) {
     return { success: false, error: parsed.error.errors[0].message };
   }
   try {
-    await db.item.update({ where: { id }, data: parsed.data });
+    // stockQty is intentionally excluded — use stockIn() to add stock
+    const { stockQty: _ignored, ...updateData } = parsed.data;
+    await db.item.update({ where: { id }, data: updateData });
     revalidatePath("/inventory");
     return { success: true };
   } catch (err: unknown) {
@@ -88,7 +106,41 @@ export async function updateItem(
   }
 }
 
+export async function stockIn(
+  itemId: string,
+  quantity: number
+): Promise<ActionResult> {
+  const denied = await requireManager();
+  if (denied) return denied;
+
+  if (!Number.isInteger(quantity) || quantity <= 0) {
+    return { success: false, error: "Quantity must be a positive whole number." };
+  }
+
+  try {
+    const item = await db.item.findUnique({
+      where: { id: itemId },
+      select: { name: true, isActive: true },
+    });
+    if (!item) return { success: false, error: "Item not found." };
+    if (!item.isActive) return { success: false, error: "Cannot stock an inactive item." };
+
+    await db.item.update({
+      where: { id: itemId },
+      data: { stockQty: { increment: quantity } },
+    });
+
+    revalidatePath("/inventory");
+    return { success: true };
+  } catch {
+    return { success: false, error: "Failed to update stock." };
+  }
+}
+
 export async function toggleItemActive(id: string): Promise<ActionResult> {
+  const denied = await requireManager();
+  if (denied) return denied;
+
   try {
     const item = await db.item.findUnique({ where: { id }, select: { isActive: true } });
     if (!item) return { success: false, error: "Item not found." };
@@ -128,6 +180,9 @@ export async function getCategories() {
 const CategoryNameSchema = z.string().min(1, "Name is required").max(100);
 
 export async function createCategory(name: string): Promise<ActionResult> {
+  const denied = await requireManager();
+  if (denied) return denied;
+
   const parsed = CategoryNameSchema.safeParse(name.trim());
   if (!parsed.success) {
     return { success: false, error: parsed.error.errors[0].message };
@@ -145,6 +200,9 @@ export async function createCategory(name: string): Promise<ActionResult> {
 }
 
 export async function deleteCategory(id: string): Promise<ActionResult> {
+  const denied = await requireManager();
+  if (denied) return denied;
+
   try {
     const cat = await db.category.findUnique({ where: { id }, select: { name: true } });
     if (!cat) return { success: false, error: "Category not found." };
