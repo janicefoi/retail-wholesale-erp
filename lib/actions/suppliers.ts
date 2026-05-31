@@ -1,0 +1,233 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { auth } from "@/auth";
+import { db } from "@/lib/db";
+import {
+  SupplierSchema,
+  PurchaseOrderSchema,
+  type SupplierInput,
+  type PurchaseOrderInput,
+} from "@/lib/validations/suppliers";
+
+// ── Types ─────────────────────────────────────────────────────────────────
+
+export type SupplierRow = {
+  id: string;
+  name: string;
+  phone: string;
+  email: string | null;
+  address: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  _count: { items: number; purchaseOrders: number };
+};
+
+export type SupplierDetail = {
+  id: string;
+  name: string;
+  phone: string;
+  email: string | null;
+  address: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  items: Array<{
+    id: string;
+    sku: string;
+    name: string;
+    category: string;
+    stockQty: number;
+    retailPrice: string;
+    wholesalePrice: string;
+    isActive: boolean;
+  }>;
+  purchaseOrders: Array<{
+    id: string;
+    quantity: number;
+    costPrice: string;
+    createdAt: string;
+    item: { id: string; name: string; sku: string };
+    recordedBy: { name: string };
+  }>;
+};
+
+// ── Get suppliers list ────────────────────────────────────────────────────
+
+export async function getSuppliers(): Promise<SupplierRow[]> {
+  const rows = await db.supplier.findMany({
+    select: {
+      id: true,
+      name: true,
+      phone: true,
+      email: true,
+      address: true,
+      notes: true,
+      createdAt: true,
+      updatedAt: true,
+      _count: { select: { items: true, purchaseOrders: true } },
+    },
+    orderBy: { name: "asc" },
+  });
+
+  return JSON.parse(JSON.stringify(rows));
+}
+
+// ── Create supplier ───────────────────────────────────────────────────────
+
+export async function createSupplier(
+  data: SupplierInput
+): Promise<{ success: true } | { success: false; error: string }> {
+  const session = await auth();
+  if (!session?.user?.id) return { success: false, error: "Unauthorized" };
+
+  const parsed = SupplierSchema.safeParse(data);
+  if (!parsed.success) return { success: false, error: parsed.error.errors[0].message };
+
+  const existing = await db.supplier.findFirst({
+    where: { phone: parsed.data.phone },
+  });
+  if (existing) {
+    return { success: false, error: "A supplier with this phone number already exists." };
+  }
+
+  await db.supplier.create({
+    data: {
+      name: parsed.data.name,
+      phone: parsed.data.phone,
+      email: parsed.data.email || null,
+      address: parsed.data.address || null,
+      notes: parsed.data.notes || null,
+    },
+  });
+
+  revalidatePath("/suppliers");
+  return { success: true };
+}
+
+// ── Update supplier ───────────────────────────────────────────────────────
+
+export async function updateSupplier(
+  id: string,
+  data: SupplierInput
+): Promise<{ success: true } | { success: false; error: string }> {
+  const session = await auth();
+  if (!session?.user?.id) return { success: false, error: "Unauthorized" };
+
+  const parsed = SupplierSchema.safeParse(data);
+  if (!parsed.success) return { success: false, error: parsed.error.errors[0].message };
+
+  const existing = await db.supplier.findFirst({
+    where: { phone: parsed.data.phone, NOT: { id } },
+  });
+  if (existing) {
+    return { success: false, error: "Another supplier already uses this phone number." };
+  }
+
+  await db.supplier.update({
+    where: { id },
+    data: {
+      name: parsed.data.name,
+      phone: parsed.data.phone,
+      email: parsed.data.email || null,
+      address: parsed.data.address || null,
+      notes: parsed.data.notes || null,
+    },
+  });
+
+  revalidatePath("/suppliers");
+  revalidatePath(`/suppliers/${id}`);
+  return { success: true };
+}
+
+// ── Record purchase order ─────────────────────────────────────────────────
+
+export async function recordPurchaseOrder(
+  data: PurchaseOrderInput
+): Promise<{ success: true } | { success: false; error: string }> {
+  const session = await auth();
+  if (!session?.user?.id) return { success: false, error: "Unauthorized" };
+
+  const parsed = PurchaseOrderSchema.safeParse(data);
+  if (!parsed.success) return { success: false, error: parsed.error.errors[0].message };
+
+  try {
+    await db.$transaction(async (tx) => {
+      // Verify item belongs to this supplier
+      const item = await tx.item.findUnique({
+        where: { id: parsed.data.itemId },
+        select: { supplierId: true, name: true, isActive: true },
+      });
+      if (!item) throw new Error("Item not found.");
+      if (!item.isActive) throw new Error("Cannot restock an inactive item.");
+      if (item.supplierId !== parsed.data.supplierId) {
+        throw new Error("This item does not belong to the selected supplier.");
+      }
+
+      // Create PurchaseOrder record
+      await tx.purchaseOrder.create({
+        data: {
+          supplierId: parsed.data.supplierId,
+          itemId: parsed.data.itemId,
+          quantity: parsed.data.quantity,
+          costPrice: parsed.data.costPrice,
+          recordedById: session.user.id,
+        },
+      });
+
+      // Increment stock quantity
+      await tx.item.update({
+        where: { id: parsed.data.itemId },
+        data: { stockQty: { increment: parsed.data.quantity } },
+      });
+    });
+
+    revalidatePath(`/suppliers/${parsed.data.supplierId}`);
+    revalidatePath("/suppliers");
+    revalidatePath("/inventory");
+    return { success: true };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to record purchase order.",
+    };
+  }
+}
+
+// ── Get supplier detail ───────────────────────────────────────────────────
+
+export async function getSupplierDetail(id: string): Promise<SupplierDetail | null> {
+  const supplier = await db.supplier.findUnique({
+    where: { id },
+    include: {
+      items: {
+        select: {
+          id: true,
+          sku: true,
+          name: true,
+          category: true,
+          stockQty: true,
+          retailPrice: true,
+          wholesalePrice: true,
+          isActive: true,
+        },
+        orderBy: { name: "asc" },
+      },
+      purchaseOrders: {
+        select: {
+          id: true,
+          quantity: true,
+          costPrice: true,
+          createdAt: true,
+          item: { select: { id: true, name: true, sku: true } },
+          recordedBy: { select: { name: true } },
+        },
+        orderBy: { createdAt: "desc" },
+      },
+    },
+  });
+
+  if (!supplier) return null;
+  return JSON.parse(JSON.stringify(supplier));
+}
