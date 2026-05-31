@@ -19,6 +19,9 @@ prisma/migrations/
 out/
 build/
 
+# Claude Code
+.claude/
+
 # Misc
 .DS_Store
 *.pem
