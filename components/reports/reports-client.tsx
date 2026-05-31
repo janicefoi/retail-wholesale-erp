@@ -1,0 +1,252 @@
+"use client";
+
+import { useEffect, useState, useTransition } from "react";
+import { format, startOfMonth } from "date-fns";
+import { Download, Loader2, BarChart3 } from "lucide-react";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { MetricCard } from "@/components/dashboard/metric-card";
+import { TrendingUp, ShoppingCart } from "lucide-react";
+import { getReportData, type ReportData, type ReportSale } from "@/lib/actions/reports";
+import { cn } from "@/lib/utils";
+
+function fmtKES(v: number) {
+  return `KES ${v.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function fmtDateTime(iso: string) {
+  return new Date(iso).toLocaleString("en-KE", {
+    day: "2-digit", month: "short", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
+}
+
+function toInputDate(d: Date) {
+  return format(d, "yyyy-MM-dd");
+}
+
+function exportCSV(sales: ReportSale[], startDate: string, endDate: string) {
+  const headers = [
+    "Receipt #", "Date", "Cashier", "Customer",
+    "Sale Type", "Total (KES)", "Tax (KES)", "Discount (KES)", "Payment",
+  ];
+  const rows = sales.map((s) => [
+    s.receiptNumber,
+    fmtDateTime(s.createdAt),
+    s.employee.name,
+    s.customer?.name ?? "",
+    s.saleType,
+    Number(s.totalAmount).toFixed(2),
+    Number(s.taxAmount).toFixed(2),
+    Number(s.discountAmount).toFixed(2),
+    s.paymentStatus,
+  ]);
+
+  const csv = [headers, ...rows]
+    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+    .join("\n");
+
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `jsh-report-${startDate}-to-${endDate}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+export function ReportsClient() {
+  const today = new Date();
+  const [startDate, setStartDate] = useState(toInputDate(startOfMonth(today)));
+  const [endDate, setEndDate] = useState(toInputDate(today));
+  const [data, setData] = useState<ReportData | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  function fetchData(start: string, end: string) {
+    startTransition(async () => {
+      const result = await getReportData(start, end);
+      setData(result);
+    });
+  }
+
+  useEffect(() => {
+    fetchData(startDate, endDate);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleApply() {
+    fetchData(startDate, endDate);
+  }
+
+  return (
+    <div className="space-y-6">
+
+      {/* ── Date range picker ─────────────────────────────────────────────── */}
+      <div className="flex flex-wrap items-end gap-3 bg-white border border-slate-200 rounded-xl p-4">
+        <div className="space-y-1">
+          <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide block">
+            From
+          </label>
+          <input
+            type="date"
+            value={startDate}
+            max={endDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide block">
+            To
+          </label>
+          <input
+            type="date"
+            value={endDate}
+            min={startDate}
+            max={toInputDate(today)}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          />
+        </div>
+        <Button onClick={handleApply} disabled={isPending} size="sm" className="gap-1.5 self-end">
+          {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          Apply
+        </Button>
+        {data && data.salesCount > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 self-end ml-auto"
+            onClick={() => exportCSV(data.sales, startDate, endDate)}
+          >
+            <Download className="h-3.5 w-3.5" />
+            Export CSV
+          </Button>
+        )}
+      </div>
+
+      {/* ── Summary cards ─────────────────────────────────────────────────── */}
+      {data && (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="lg:col-span-2">
+              <MetricCard
+                title="Total revenue"
+                value={fmtKES(data.totalRevenue)}
+                icon={TrendingUp}
+                color="blue"
+              />
+            </div>
+            <div>
+              <MetricCard
+                title="Sales count"
+                value={String(data.salesCount)}
+                icon={ShoppingCart}
+                color="green"
+              />
+            </div>
+            <div>
+              <MetricCard
+                title="Retail revenue"
+                value={fmtKES(data.revenueByType.RETAIL)}
+                icon={BarChart3}
+                color="blue"
+                subtitle="Retail"
+              />
+            </div>
+            <div>
+              <MetricCard
+                title="Wholesale revenue"
+                value={fmtKES(data.revenueByType.WHOLESALE)}
+                icon={BarChart3}
+                color="amber"
+                subtitle="Wholesale"
+              />
+            </div>
+          </div>
+
+          {/* ── Sales table ─────────────────────────────────────────────── */}
+          <div>
+            <h2 className="text-sm font-semibold text-slate-700 mb-3">
+              Sales ({data.salesCount})
+            </h2>
+            <div className="rounded-lg border border-slate-200 bg-white overflow-hidden [&_th]:h-8 [&_th]:py-2 [&_th]:text-[11px] [&_td]:py-2 [&_td]:align-middle">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-slate-50 hover:bg-slate-50">
+                    <TableHead className="w-40 whitespace-nowrap">Receipt #</TableHead>
+                    <TableHead className="w-36 whitespace-nowrap">Date</TableHead>
+                    <TableHead className="w-28">Cashier</TableHead>
+                    <TableHead className="w-28">Customer</TableHead>
+                    <TableHead className="w-20 whitespace-nowrap">Type</TableHead>
+                    <TableHead className="w-32 text-right whitespace-nowrap">Total</TableHead>
+                    <TableHead className="w-20 whitespace-nowrap">Payment</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.sales.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="py-10 text-center text-xs text-slate-400">
+                        No sales found for the selected date range.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    data.sales.map((sale) => (
+                      <TableRow key={sale.id} className="hover:bg-slate-50/60">
+                        <TableCell className="font-mono text-[11px] text-slate-500">
+                          {sale.receiptNumber}
+                        </TableCell>
+                        <TableCell className="text-xs text-slate-600 whitespace-nowrap">
+                          {fmtDateTime(sale.createdAt)}
+                        </TableCell>
+                        <TableCell className="text-xs text-slate-700 max-w-0">
+                          <span className="block truncate">{sale.employee.name}</span>
+                        </TableCell>
+                        <TableCell className="text-xs text-slate-500 max-w-0">
+                          <span className="block truncate">
+                            {sale.customer?.name ?? <span className="text-slate-300">Walk-in</span>}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full">
+                            {sale.saleType}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right text-xs font-semibold tabular-nums text-slate-800">
+                          {fmtKES(Number(sale.totalAmount))}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            className={cn(
+                              "text-[10px] font-medium border px-1.5 py-0",
+                              sale.paymentStatus === "PAID"
+                                ? "bg-green-50 text-green-700 border-green-200"
+                                : "bg-amber-50 text-amber-700 border-amber-200"
+                            )}
+                          >
+                            {sale.paymentStatus}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {isPending && !data && (
+        <div className="flex items-center justify-center py-16 text-slate-400 gap-2">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span className="text-sm">Loading report…</span>
+        </div>
+      )}
+    </div>
+  );
+}
