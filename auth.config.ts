@@ -12,26 +12,27 @@ export const authConfig: NextAuthConfig = {
       const isLoggedIn = !!auth?.user;
       const path = nextUrl.pathname;
 
-      // Admin-only section — non-admins are bounced to /dashboard
-      if (path.startsWith("/dashboard/admin")) {
-        if (!isLoggedIn) return false;
+      // Always pass NextAuth API routes through
+      if (path.startsWith("/api/auth")) return true;
+
+      // Login page: bounce authenticated users to dashboard
+      if (path === "/login") {
+        return isLoggedIn
+          ? Response.redirect(new URL("/dashboard", nextUrl))
+          : true;
+      }
+
+      // Admin-only section — non-admins bounce to /dashboard
+      if (path.startsWith("/admin")) {
+        if (!isLoggedIn) return false; // → /login
         if (auth?.user?.role !== "ADMIN") {
           return Response.redirect(new URL("/dashboard", nextUrl));
         }
         return true;
       }
 
-      // All other dashboard routes require authentication
-      if (path.startsWith("/dashboard")) {
-        return isLoggedIn;
-      }
-
-      // Redirect already-authenticated users away from /login
-      if (isLoggedIn && path === "/login") {
-        return Response.redirect(new URL("/dashboard", nextUrl));
-      }
-
-      return true;
+      // Every other route requires login
+      return isLoggedIn; // false → /login
     },
     jwt({ token, user }) {
       if (user) {
@@ -46,5 +47,5 @@ export const authConfig: NextAuthConfig = {
       return session;
     },
   },
-  providers: [], // Credentials provider added in auth.ts
+  providers: [],
 };
