@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { VAT_RATE } from "@/lib/constants/tax";
+import { VAT_EXTRACT } from "@/lib/constants/tax";
 
 export type SaleType = "RETAIL" | "WHOLESALE";
 export type PaymentStatus = "PAID" | "CREDIT";
@@ -11,6 +11,7 @@ export interface CartItem {
   quantity: number;
   unitPrice: number;
   subtotal: number;
+  stockQty: number;
   // All price tiers kept so prices update instantly when sale type switches
   retailPrice: number;
   wholesalePrice: number;
@@ -22,6 +23,7 @@ export interface ItemForCart {
   id: string;
   name: string;
   sku: string;
+  stockQty: number;
   retailPrice: string | number;
   wholesalePrice: string | number;
   specialPrice: string | number | null;
@@ -46,6 +48,7 @@ interface CartStore {
   clearCart: () => void;
 
   subtotal: () => number;
+  // VAT extracted from the VAT-inclusive total (total × 16/116)
   taxAmount: () => number;
   total: () => number;
 }
@@ -83,12 +86,14 @@ export const useCartStore = create<CartStore>((set, get) => ({
 
     if (existing) {
       updated = items.map((i) =>
-        i.itemId === incoming.id ? (() => {
-          const next = { ...i, useSpecialPrice };
-          const unitPrice = priceFor(next, saleType);
-          const quantity = i.quantity + addQty;
-          return { ...next, quantity, unitPrice, subtotal: quantity * unitPrice };
-        })() : i
+        i.itemId === incoming.id
+          ? (() => {
+              const next = { ...i, useSpecialPrice, stockQty: incoming.stockQty };
+              const unitPrice = priceFor(next, saleType);
+              const quantity = i.quantity + addQty;
+              return { ...next, quantity, unitPrice, subtotal: quantity * unitPrice };
+            })()
+          : i
       );
     } else {
       const unitPrice = priceFor(
@@ -104,6 +109,7 @@ export const useCartStore = create<CartStore>((set, get) => ({
           quantity: addQty,
           unitPrice,
           subtotal: unitPrice * addQty,
+          stockQty: incoming.stockQty,
           retailPrice,
           wholesalePrice,
           specialPrice,
@@ -121,9 +127,11 @@ export const useCartStore = create<CartStore>((set, get) => ({
   updateQuantity: (itemId, qty) => {
     if (qty < 1) return;
     set((s) => ({
-      items: s.items.map((i) =>
-        i.itemId === itemId ? { ...i, quantity: qty, subtotal: qty * i.unitPrice } : i
-      ),
+      items: s.items.map((i) => {
+        if (i.itemId !== itemId) return i;
+        const safeQty = Math.min(qty, i.stockQty);
+        return { ...i, quantity: safeQty, subtotal: safeQty * i.unitPrice };
+      }),
     }));
   },
 
@@ -163,13 +171,13 @@ export const useCartStore = create<CartStore>((set, get) => ({
     }),
 
   subtotal: () => get().items.reduce((sum, i) => sum + i.subtotal, 0),
+
+  // VAT is INCLUSIVE in Kenya: extract it from the total rather than adding it
   taxAmount: () => {
-    const pretax = Math.max(0, get().subtotal() - get().discountAmount);
-    return Math.round(pretax * VAT_RATE * 100) / 100;
+    const tot = Math.max(0, get().subtotal() - get().discountAmount);
+    return Math.round(tot * VAT_EXTRACT * 100) / 100;
   },
-  total: () => {
-    const pretax = Math.max(0, get().subtotal() - get().discountAmount);
-    const tax = Math.round(pretax * VAT_RATE * 100) / 100;
-    return +(pretax + tax).toFixed(2);
-  },
+
+  // Total = subtotal − discount (VAT is already inside the prices)
+  total: () => Math.max(0, get().subtotal() - get().discountAmount),
 }));

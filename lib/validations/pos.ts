@@ -15,8 +15,8 @@ export const CompleteSaleSchema = z.object({
   paymentStatus: z.enum(["PAID", "CREDIT"]),
   customerId: z.string().nullable(),
   discountAmount: z.number().min(0),
-  taxAmount: z.number().min(0),
   totalAmount: z.number().min(0),
+  // taxAmount is computed server-side (extracted from VAT-inclusive totalAmount)
 });
 
 export type CompleteSaleInput = z.infer<typeof CompleteSaleSchema>;

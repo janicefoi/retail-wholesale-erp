@@ -10,6 +10,7 @@ const nextConfig = {
     ],
   },
   experimental: {
+    serverComponentsExternalPackages: ["bcryptjs", "@prisma/client", "prisma"],
     serverActions: {
       allowedOrigins: ["localhost:3000"],
     },

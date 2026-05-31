@@ -7,7 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { CustomerSearch } from "@/components/pos/customer-search";
 import { useCartStore, type SaleType, type PaymentStatus } from "@/lib/store/cart";
 import { completeSale, type SaleResult } from "@/lib/actions/pos";
-import { VAT_LABEL } from "@/lib/constants/tax";
+import { VAT_INCLUSIVE_LABEL } from "@/lib/constants/tax";
 import { cn } from "@/lib/utils";
 
 function fmt(v: number) {
@@ -45,6 +45,10 @@ export function CartPanel({ onSaleComplete }: CartPanelProps) {
   const sub = subtotal();
   const tax = taxAmount();
   const tot = total();
+  const discountError =
+    items.length > 0 && discountAmount > 0 && discountAmount >= sub
+      ? `Discount (${fmt(discountAmount)}) cannot equal or exceed the subtotal (${fmt(sub)})`
+      : null;
 
   const SALE_TYPES: { value: SaleType; label: string }[] = [
     { value: "RETAIL", label: "Retail" },
@@ -53,6 +57,7 @@ export function CartPanel({ onSaleComplete }: CartPanelProps) {
 
   async function handleCompleteSale() {
     if (items.length === 0) return;
+    if (discountError) return;
     if (paymentStatus === "CREDIT" && !customerId) {
       setError("Please select a customer for credit payment.");
       return;
@@ -71,7 +76,6 @@ export function CartPanel({ onSaleComplete }: CartPanelProps) {
         paymentStatus,
         customerId,
         discountAmount,
-        taxAmount: tax,
         totalAmount: tot,
       });
 
@@ -165,22 +169,33 @@ export function CartPanel({ onSaleComplete }: CartPanelProps) {
         </div>
 
         {/* Discount */}
-        <div className="flex items-center gap-2">
-          <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide shrink-0">
-            Discount
-          </label>
-          <div className="ml-auto flex items-center gap-1">
-            <span className="text-xs text-slate-400">KES</span>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={discountAmount || ""}
-              onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
-              placeholder="0.00"
-              className="w-24 text-right text-xs tabular-nums px-2 py-1 rounded-md border border-slate-200 focus:outline-none focus:ring-1 focus:ring-ring"
-            />
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide shrink-0">
+              Discount
+            </label>
+            <div className="ml-auto flex items-center gap-1">
+              <span className="text-xs text-slate-400">KES</span>
+              <input
+                type="number"
+                min="0"
+                max={sub > 0 ? sub - 0.01 : undefined}
+                step="0.01"
+                value={discountAmount || ""}
+                onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
+                placeholder="0.00"
+                className={cn(
+                  "w-24 text-right text-xs tabular-nums px-2 py-1 rounded-md border focus:outline-none focus:ring-1",
+                  discountError
+                    ? "border-red-400 focus:ring-red-400 bg-red-50"
+                    : "border-slate-200 focus:ring-ring"
+                )}
+              />
+            </div>
           </div>
+          {discountError && (
+            <p className="text-[10px] text-red-600 text-right">{discountError}</p>
+          )}
         </div>
 
         <Separator />
@@ -197,13 +212,13 @@ export function CartPanel({ onSaleComplete }: CartPanelProps) {
               <span className="tabular-nums">− {fmt(discountAmount)}</span>
             </div>
           )}
-          <div className="flex justify-between text-xs text-slate-500">
-            <span>{VAT_LABEL}</span>
-            <span className="tabular-nums">{fmt(tax)}</span>
-          </div>
           <div className="flex justify-between font-bold text-slate-900 pt-1">
             <span className="text-sm">Total</span>
             <span className="text-sm tabular-nums">{fmt(tot)}</span>
+          </div>
+          <div className="flex justify-between text-xs text-slate-400 pt-0.5">
+            <span>{VAT_INCLUSIVE_LABEL}</span>
+            <span className="tabular-nums">{fmt(tax)}</span>
           </div>
         </div>
 
@@ -218,7 +233,7 @@ export function CartPanel({ onSaleComplete }: CartPanelProps) {
         {/* Complete button */}
         <Button
           className="w-full h-10 text-sm font-semibold"
-          disabled={items.length === 0 || isPending}
+          disabled={items.length === 0 || isPending || !!discountError}
           onClick={handleCompleteSale}
         >
           {isPending ? (
