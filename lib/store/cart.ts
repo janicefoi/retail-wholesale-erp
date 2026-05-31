@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { VAT_RATE } from "@/lib/constants/tax";
 
 export type SaleType = "RETAIL" | "WHOLESALE";
 export type PaymentStatus = "PAID" | "CREDIT";
@@ -45,6 +46,7 @@ interface CartStore {
   clearCart: () => void;
 
   subtotal: () => number;
+  taxAmount: () => number;
   total: () => number;
 }
 
@@ -161,5 +163,13 @@ export const useCartStore = create<CartStore>((set, get) => ({
     }),
 
   subtotal: () => get().items.reduce((sum, i) => sum + i.subtotal, 0),
-  total: () => Math.max(0, get().items.reduce((sum, i) => sum + i.subtotal, 0) - get().discountAmount),
+  taxAmount: () => {
+    const pretax = Math.max(0, get().subtotal() - get().discountAmount);
+    return Math.round(pretax * VAT_RATE * 100) / 100;
+  },
+  total: () => {
+    const pretax = Math.max(0, get().subtotal() - get().discountAmount);
+    const tax = Math.round(pretax * VAT_RATE * 100) / 100;
+    return +(pretax + tax).toFixed(2);
+  },
 }));

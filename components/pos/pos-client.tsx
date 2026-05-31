@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ItemSearch } from "@/components/pos/item-search";
 import { CartPanel } from "@/components/pos/cart-panel";
-import { ReceiptModal } from "@/components/pos/receipt-modal";
+import { ReceiptModal } from "@/components/receipt/ReceiptModal";
 import type { SaleResult } from "@/lib/actions/pos";
 
 export function POSClient() {
@@ -25,7 +25,7 @@ export function POSClient() {
       {/* ── Receipt modal (shown after successful sale) ───────────── */}
       {completedSale && (
         <ReceiptModal
-          sale={completedSale}
+          saleId={completedSale.id}
           onClose={() => setCompletedSale(null)}
         />
       )}

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { CompleteSaleSchema, type CompleteSaleInput } from "@/lib/validations/pos";
+import { VAT_RATE } from "@/lib/constants/tax";
 
 // ── Receipt number: RCP-YYYYMMDD-XXXX ────────────────────────────────────
 
@@ -90,7 +91,7 @@ export async function searchCustomers(query: string): Promise<SearchedCustomer[]
   return JSON.parse(JSON.stringify(rows));
 }
 
-// ── Complete sale ─────────────────────────────────────────────────────────
+// ── Sale result type ──────────────────────────────────────────────────────
 
 export type SaleResult = {
   id: string;
@@ -98,9 +99,10 @@ export type SaleResult = {
   saleType: string;
   paymentStatus: string;
   discountAmount: string;
+  taxAmount: string;
   totalAmount: string;
   createdAt: string;
-  customer: { name: string; phone: string } | null;
+  customer: { name: string; phone: string; creditBalance: string } | null;
   employee: { name: string };
   items: Array<{
     quantity: number;
@@ -109,6 +111,8 @@ export type SaleResult = {
     item: { name: string; sku: string };
   }>;
 };
+
+// ── Complete sale ─────────────────────────────────────────────────────────
 
 export async function completeSale(
   data: CompleteSaleInput
@@ -125,9 +129,11 @@ export async function completeSale(
     return { success: false, error: "Credit payment requires a customer to be selected." };
   }
 
-  // Sanity-check totals
+  // Sanity-check totals (allow 2-cent rounding tolerance)
   const itemsTotal = parsed.data.items.reduce((sum, i) => sum + i.subtotal, 0);
-  const expectedTotal = +(itemsTotal - parsed.data.discountAmount).toFixed(2);
+  const pretax = +(itemsTotal - parsed.data.discountAmount).toFixed(2);
+  const expectedTax = Math.round(pretax * VAT_RATE * 100) / 100;
+  const expectedTotal = +(pretax + expectedTax).toFixed(2);
   if (Math.abs(expectedTotal - parsed.data.totalAmount) > 0.02) {
     return { success: false, error: "Total amount mismatch — please try again." };
   }
@@ -157,6 +163,7 @@ export async function completeSale(
           saleType: parsed.data.saleType,
           paymentStatus: parsed.data.paymentStatus,
           discountAmount: parsed.data.discountAmount,
+          taxAmount: parsed.data.taxAmount,
           totalAmount: parsed.data.totalAmount,
           isVoid: false,
           customerId: parsed.data.customerId,
@@ -172,7 +179,7 @@ export async function completeSale(
         },
         include: {
           items: { include: { item: { select: { name: true, sku: true } } } },
-          customer: { select: { name: true, phone: true } },
+          customer: { select: { name: true, phone: true, creditBalance: true } },
           employee: { select: { name: true } },
         },
       });
@@ -185,12 +192,17 @@ export async function completeSale(
         });
       }
 
-      // 4. Add to customer credit balance
+      // 4. Add to customer credit balance and return updated balance
       if (parsed.data.paymentStatus === "CREDIT" && parsed.data.customerId) {
         await tx.customer.update({
           where: { id: parsed.data.customerId },
           data: { creditBalance: { increment: parsed.data.totalAmount } },
         });
+        const freshCustomer = await tx.customer.findUnique({
+          where: { id: parsed.data.customerId },
+          select: { name: true, phone: true, creditBalance: true },
+        });
+        return { ...created, customer: freshCustomer };
       }
 
       return created;
@@ -203,4 +215,23 @@ export async function completeSale(
     const msg = err instanceof Error ? err.message : "Failed to complete sale. Please try again.";
     return { success: false, error: msg };
   }
+}
+
+// ── Fetch sale by ID (for receipt modal) ─────────────────────────────────
+
+export async function getSaleById(id: string): Promise<SaleResult | null> {
+  const session = await auth();
+  if (!session?.user?.id) return null;
+
+  const sale = await db.sale.findUnique({
+    where: { id },
+    include: {
+      items: { include: { item: { select: { name: true, sku: true } } } },
+      customer: { select: { name: true, phone: true, creditBalance: true } },
+      employee: { select: { name: true } },
+    },
+  });
+
+  if (!sale) return null;
+  return JSON.parse(JSON.stringify(sale));
 }

@@ -15,6 +15,7 @@ export const CompleteSaleSchema = z.object({
   paymentStatus: z.enum(["PAID", "CREDIT"]),
   customerId: z.string().nullable(),
   discountAmount: z.number().min(0),
+  taxAmount: z.number().min(0),
   totalAmount: z.number().min(0),
 });
 

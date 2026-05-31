@@ -73,3 +73,19 @@
     @apply bg-background text-foreground;
   }
 }
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .thermal-receipt-print,
+  .thermal-receipt-print * {
+    visibility: visible;
+  }
+  .thermal-receipt-print {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 302px;
+  }
+}

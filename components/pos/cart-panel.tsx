@@ -7,6 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { CustomerSearch } from "@/components/pos/customer-search";
 import { useCartStore, type SaleType, type PaymentStatus } from "@/lib/store/cart";
 import { completeSale, type SaleResult } from "@/lib/actions/pos";
+import { VAT_LABEL } from "@/lib/constants/tax";
 import { cn } from "@/lib/utils";
 
 function fmt(v: number) {
@@ -37,10 +38,12 @@ export function CartPanel({ onSaleComplete }: CartPanelProps) {
     setDiscount,
     clearCart,
     subtotal,
+    taxAmount,
     total,
   } = useCartStore();
 
   const sub = subtotal();
+  const tax = taxAmount();
   const tot = total();
 
   const SALE_TYPES: { value: SaleType; label: string }[] = [
@@ -68,6 +71,7 @@ export function CartPanel({ onSaleComplete }: CartPanelProps) {
         paymentStatus,
         customerId,
         discountAmount,
+        taxAmount: tax,
         totalAmount: tot,
       });
 
@@ -193,6 +197,10 @@ export function CartPanel({ onSaleComplete }: CartPanelProps) {
               <span className="tabular-nums">− {fmt(discountAmount)}</span>
             </div>
           )}
+          <div className="flex justify-between text-xs text-slate-500">
+            <span>{VAT_LABEL}</span>
+            <span className="tabular-nums">{fmt(tax)}</span>
+          </div>
           <div className="flex justify-between font-bold text-slate-900 pt-1">
             <span className="text-sm">Total</span>
             <span className="text-sm tabular-nums">{fmt(tot)}</span>
