@@ -114,6 +114,7 @@ export async function updateSupplier(
 ): Promise<{ success: true } | { success: false; error: string }> {
   const session = await auth();
   if (!session?.user?.id) return { success: false, error: "Unauthorized" };
+  if (session.user.role === "CASHIER") return { success: false, error: "You don't have permission to edit suppliers." };
 
   const parsed = SupplierSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.errors[0].message };
@@ -148,6 +149,7 @@ export async function recordPurchaseOrder(
 ): Promise<{ success: true } | { success: false; error: string }> {
   const session = await auth();
   if (!session?.user?.id) return { success: false, error: "Unauthorized" };
+  if (session.user.role !== "ADMIN") return { success: false, error: "Only admins can record purchase orders." };
 
   const parsed = PurchaseOrderSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.errors[0].message };
@@ -165,6 +167,8 @@ export async function recordPurchaseOrder(
         throw new Error("This item does not belong to the selected supplier.");
       }
 
+      const branchId = session.user.branchId;
+
       // Create PurchaseOrder record
       await tx.purchaseOrder.create({
         data: {
@@ -173,14 +177,18 @@ export async function recordPurchaseOrder(
           quantity: parsed.data.quantity,
           costPrice: parsed.data.costPrice,
           recordedById: session.user.id,
+          branchId: branchId ?? null,
         },
       });
 
-      // Increment stock quantity
-      await tx.item.update({
-        where: { id: parsed.data.itemId },
-        data: { stockQty: { increment: parsed.data.quantity } },
-      });
+      // Increment branch stock
+      if (branchId) {
+        await tx.branchStock.upsert({
+          where: { itemId_branchId: { itemId: parsed.data.itemId, branchId } },
+          update: { stockQty: { increment: parsed.data.quantity } },
+          create: { itemId: parsed.data.itemId, branchId, stockQty: parsed.data.quantity, lowStockThreshold: 5 },
+        });
+      }
     });
 
     revalidatePath(`/suppliers/${parsed.data.supplierId}`);
@@ -198,6 +206,9 @@ export async function recordPurchaseOrder(
 // ── Get supplier detail ───────────────────────────────────────────────────
 
 export async function getSupplierDetail(id: string): Promise<SupplierDetail | null> {
+  const session = await auth();
+  const branchId = session?.user?.branchId ?? null;
+
   const supplier = await db.supplier.findUnique({
     where: { id },
     include: {
@@ -207,10 +218,12 @@ export async function getSupplierDetail(id: string): Promise<SupplierDetail | nu
           sku: true,
           name: true,
           category: true,
-          stockQty: true,
           retailPrice: true,
           wholesalePrice: true,
           isActive: true,
+          branchStocks: branchId
+            ? { where: { branchId }, select: { stockQty: true } }
+            : { select: { stockQty: true } },
         },
         orderBy: { name: "asc" },
       },
@@ -229,5 +242,27 @@ export async function getSupplierDetail(id: string): Promise<SupplierDetail | nu
   });
 
   if (!supplier) return null;
-  return JSON.parse(JSON.stringify(supplier));
+
+  const result: SupplierDetail = {
+    ...supplier,
+    createdAt: supplier.createdAt.toISOString(),
+    updatedAt: supplier.updatedAt.toISOString(),
+    items: supplier.items.map((item) => ({
+      id: item.id,
+      sku: item.sku,
+      name: item.name,
+      category: item.category,
+      retailPrice: item.retailPrice.toString(),
+      wholesalePrice: item.wholesalePrice.toString(),
+      isActive: item.isActive,
+      stockQty: item.branchStocks.reduce((sum, bs) => sum + bs.stockQty, 0),
+    })),
+    purchaseOrders: supplier.purchaseOrders.map((po) => ({
+      ...po,
+      costPrice: po.costPrice.toString(),
+      createdAt: po.createdAt.toISOString(),
+    })),
+  };
+
+  return JSON.parse(JSON.stringify(result));
 }

@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { auth } from "@/auth";
 import { getSupplierDetail } from "@/lib/actions/suppliers";
 import { SupplierDetailClient } from "@/components/suppliers/supplier-detail-client";
 
@@ -14,7 +15,7 @@ export async function generateMetadata({ params }: Props) {
 
 export default async function SupplierDetailPage({ params }: Props) {
   const { id } = await params;
-  const supplier = await getSupplierDetail(id);
+  const [session, supplier] = await Promise.all([auth(), getSupplierDetail(id)]);
   if (!supplier) notFound();
-  return <SupplierDetailClient supplier={supplier} />;
+  return <SupplierDetailClient supplier={supplier} role={session?.user?.role ?? "CASHIER"} />;
 }

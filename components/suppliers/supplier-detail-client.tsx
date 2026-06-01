@@ -33,9 +33,12 @@ function fmtDateTime(iso: string) {
 
 interface Props {
   supplier: SupplierDetail;
+  role: string;
 }
 
-export function SupplierDetailClient({ supplier }: Props) {
+export function SupplierDetailClient({ supplier, role }: Props) {
+  const canEdit = role !== "CASHIER";
+  const canRecordPurchase = role === "ADMIN";
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [editOpen, setEditOpen] = useState(false);
@@ -81,29 +84,33 @@ export function SupplierDetailClient({ supplier }: Props) {
           Suppliers
         </Link>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            onClick={() => setEditOpen(true)}
-          >
-            <Pencil className="h-3.5 w-3.5" />
-            Edit
-          </Button>
-          <Button
-            size="sm"
-            className="gap-1.5"
-            onClick={() => setPurchaseOpen(true)}
-            disabled={supplier.items.filter((i) => i.isActive).length === 0}
-            title={
-              supplier.items.filter((i) => i.isActive).length === 0
-                ? "No active items linked to this supplier"
-                : undefined
-            }
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Record stock purchase
-          </Button>
+          {canEdit && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setEditOpen(true)}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Edit
+            </Button>
+          )}
+          {canRecordPurchase && (
+            <Button
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setPurchaseOpen(true)}
+              disabled={supplier.items.filter((i) => i.isActive).length === 0}
+              title={
+                supplier.items.filter((i) => i.isActive).length === 0
+                  ? "No active items linked to this supplier"
+                  : undefined
+              }
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Record stock purchase
+            </Button>
+          )}
         </div>
       </div>
 

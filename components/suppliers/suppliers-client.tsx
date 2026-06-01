@@ -13,9 +13,11 @@ import type { SupplierRow } from "@/lib/actions/suppliers";
 
 interface Props {
   suppliers: SupplierRow[];
+  role: string;
 }
 
-export function SuppliersClient({ suppliers }: Props) {
+export function SuppliersClient({ suppliers, role }: Props) {
+  const canEdit = role !== "CASHIER";
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [search, setSearch] = useState("");
@@ -146,19 +148,21 @@ export function SuppliersClient({ suppliers }: Props) {
                   </TableCell>
 
                   <TableCell className="text-right">
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-6 w-6 text-slate-400 hover:text-blue-600"
-                      title="Edit supplier"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditSupplier(s);
-                        setDialogOpen(true);
-                      }}
-                    >
-                      <Pencil className="h-3 w-3" />
-                    </Button>
+                    {canEdit && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6 text-slate-400 hover:text-blue-600"
+                        title="Edit supplier"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditSupplier(s);
+                          setDialogOpen(true);
+                        }}
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))
