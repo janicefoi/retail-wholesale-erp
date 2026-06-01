@@ -131,7 +131,7 @@ export function AuditLogClient({ data }: Props) {
                     </TableCell>
                     <TableCell className="font-medium">{p.customer.name}</TableCell>
                     <TableCell className="text-right font-semibold text-green-600">
-                      {fmtKES(p.amount)}
+                      {fmtKES(Number(p.amount))}
                     </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
                       {p.notes ?? "—"}

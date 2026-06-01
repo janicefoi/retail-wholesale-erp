@@ -1,49 +1,72 @@
 "use client";
 
 import { useState } from "react";
-import { TrendingUp, ShoppingCart, AlertTriangle, CreditCard } from "lucide-react";
+import { TrendingUp, ShoppingCart, AlertTriangle, CreditCard, BarChart3 } from "lucide-react";
 import { MetricCard } from "@/components/dashboard/metric-card";
+import { RevenueChart } from "@/components/dashboard/revenue-chart";
 import { RecentSalesTable } from "@/components/dashboard/recent-sales-table";
 import { LowStockList } from "@/components/dashboard/low-stock-list";
-import type { DashboardMetrics, RecentSale, LowStockAlert } from "@/lib/actions/dashboard";
-
-interface BranchMetric {
-  branch: { id: string; name: string };
-  metrics: DashboardMetrics;
-  lowStock: LowStockAlert[];
-}
+import { TopItems } from "@/components/dashboard/top-items";
+import { TopDebtors } from "@/components/dashboard/top-debtors";
+import { BranchComparison } from "@/components/dashboard/branch-comparison";
+import type {
+  DashboardMetrics, DailyRevenue, TopItem, TopDebtor,
+  RecentSale, LowStockAlert,
+} from "@/lib/actions/dashboard";
 
 function fmtKES(v: number) {
   return `KES ${v.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function pct(current: number, previous: number) {
+  if (previous === 0) return current > 0 ? 100 : 0;
+  return ((current - previous) / previous) * 100;
+}
+
+interface BranchData {
+  branch: { id: string; name: string };
+  metrics: DashboardMetrics;
+  lowStock: LowStockAlert[];
+  chart: DailyRevenue[];
+  topItems: TopItem[];
+  topDebtors: TopDebtor[];
+}
+
+interface Combined {
+  metrics: DashboardMetrics;
+  sales: RecentSale[];
+  lowStock: LowStockAlert[];
+  chart: DailyRevenue[];
+  topItems: TopItem[];
+  topDebtors: TopDebtor[];
+}
+
 interface Props {
   userName: string;
   branches: { id: string; name: string }[];
-  combinedMetrics: DashboardMetrics;
-  combinedSales: RecentSale[];
-  combinedLowStock: LowStockAlert[];
-  branchMetrics: BranchMetric[];
+  combined: Combined;
+  branchData: BranchData[];
 }
 
-export function BranchDashboard({
-  userName,
-  branches,
-  combinedMetrics,
-  combinedSales,
-  combinedLowStock,
-  branchMetrics,
-}: Props) {
+export function BranchDashboard({ userName, branches, combined, branchData }: Props) {
   const tabs = ["Combined", ...branches.map((b) => b.name)];
   const [activeTab, setActiveTab] = useState("Combined");
 
   const isCombined = activeTab === "Combined";
-  const branchData = branchMetrics.find((bm) => bm.branch.name === activeTab);
-  const metrics = isCombined ? combinedMetrics : branchData?.metrics ?? combinedMetrics;
-  const lowStock = isCombined ? combinedLowStock : branchData?.lowStock ?? [];
+  const active: { metrics: DashboardMetrics; lowStock: LowStockAlert[]; chart: DailyRevenue[]; topItems: TopItem[]; topDebtors: TopDebtor[] } =
+    isCombined
+      ? combined
+      : (branchData.find((b) => b.branch.name === activeTab) ?? combined);
+
+  const m = active.metrics;
+
+  const revenueTrend = { pct: pct(m.todayRevenue, m.yesterdayRevenue), label: "vs yesterday" };
+  const salesTrend   = { pct: pct(m.todaySalesCount, m.yesterdaySalesCount), label: "vs yesterday" };
 
   return (
     <div className="space-y-6">
+
+      {/* ── Header + Branch Tabs ─────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
@@ -51,8 +74,6 @@ export function BranchDashboard({
             Welcome back, <span className="font-medium text-slate-700">{userName}</span>
           </p>
         </div>
-
-        {/* Branch tabs */}
         <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
           {tabs.map((tab) => (
             <button
@@ -70,43 +91,77 @@ export function BranchDashboard({
         </div>
       </div>
 
-      {/* Metric cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard
-          title="Today's revenue"
-          value={fmtKES(metrics.todayRevenue)}
-          icon={TrendingUp}
-          color="blue"
-          subtitle={`${metrics.todaySalesCount} sale${metrics.todaySalesCount !== 1 ? "s" : ""} today`}
-        />
-        <MetricCard title="Sales today" value={String(metrics.todaySalesCount)} icon={ShoppingCart} color="green" />
-        <MetricCard
-          title="Low stock items"
-          value={String(metrics.lowStockCount)}
-          icon={AlertTriangle}
-          color={metrics.lowStockCount > 0 ? "amber" : "green"}
-          subtitle={metrics.lowStockCount === 0 ? "All stocked up" : "Need restocking"}
-        />
-        <MetricCard
-          title="Outstanding credit"
-          value={fmtKES(metrics.totalOutstandingCredit)}
-          icon={CreditCard}
-          color={metrics.totalOutstandingCredit > 0 ? "red" : "green"}
-          subtitle={metrics.totalOutstandingCredit === 0 ? "No outstanding credit" : undefined}
-        />
-      </div>
-
-      {/* Recent sales + Low stock */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {isCombined && (
-          <div className="lg:col-span-2">
-            <RecentSalesTable sales={combinedSales} />
-          </div>
-        )}
-        <div className={isCombined ? "" : "lg:col-span-3"}>
-          <LowStockList items={lowStock} />
+      {/* ── Metric cards ─────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="lg:col-span-1">
+          <MetricCard
+            title="Today's revenue"
+            value={fmtKES(m.todayRevenue)}
+            icon={TrendingUp}
+            color="blue"
+            trend={revenueTrend}
+          />
+        </div>
+        <div className="lg:col-span-1">
+          <MetricCard
+            title="MTD revenue"
+            value={fmtKES(m.mtdRevenue)}
+            icon={BarChart3}
+            color="blue"
+            subtitle={`${m.mtdSalesCount} sales this month`}
+          />
+        </div>
+        <div className="lg:col-span-1">
+          <MetricCard
+            title="Sales today"
+            value={String(m.todaySalesCount)}
+            icon={ShoppingCart}
+            color="green"
+            trend={salesTrend}
+          />
+        </div>
+        <div className="lg:col-span-1">
+          <MetricCard
+            title="Low stock items"
+            value={String(m.lowStockCount)}
+            icon={AlertTriangle}
+            color={m.lowStockCount > 0 ? "amber" : "green"}
+            subtitle={m.lowStockCount === 0 ? "All stocked up" : "Need restocking"}
+          />
+        </div>
+        <div className="lg:col-span-1">
+          <MetricCard
+            title="Outstanding credit"
+            value={fmtKES(m.totalOutstandingCredit)}
+            icon={CreditCard}
+            color={m.totalOutstandingCredit > 0 ? "red" : "green"}
+            subtitle={m.totalOutstandingCredit === 0 ? "No outstanding credit" : undefined}
+          />
         </div>
       </div>
+
+      {/* ── Revenue chart + Top debtors ───────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <RevenueChart data={active.chart} />
+        </div>
+        <div>
+          <TopDebtors debtors={active.topDebtors} />
+        </div>
+      </div>
+
+      {/* ── Top items + Branch comparison (combined) or Low stock (branch) ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <TopItems items={active.topItems} />
+        {isCombined ? (
+          <BranchComparison branches={branchData.map((b) => ({ branch: b.branch, metrics: b.metrics }))} />
+        ) : (
+          <LowStockList items={active.lowStock} />
+        )}
+      </div>
+
+      {/* ── Recent sales (combined only) ─────────────────────────────────── */}
+      {isCombined && <RecentSalesTable sales={combined.sales} />}
     </div>
   );
 }

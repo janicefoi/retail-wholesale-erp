@@ -1,10 +1,8 @@
 import { ShoppingCart, AlertTriangle } from "lucide-react";
 import { auth } from "@/auth";
 import {
-  getDashboardMetrics,
-  getRecentSales,
-  getLowStockAlerts,
-  getBranches,
+  getDashboardMetrics, getRecentSales, getLowStockAlerts,
+  getRevenueChart, getTopSellingItems, getTopDebtors, getBranches,
 } from "@/lib/actions/dashboard";
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { LowStockList } from "@/components/dashboard/low-stock-list";
@@ -19,40 +17,57 @@ export default async function DashboardPage() {
   const branchId = session?.user?.branchId ?? null;
 
   if (isAdmin) {
-    // Admin sees branch tabs + combined: fetch all at once
     const branches = await getBranches();
-    const [combinedMetrics, combinedSales, combinedLowStock, ...perBranchData] = await Promise.all([
+
+    // Fetch combined + per-branch data all in parallel
+    const [
+      combinedMetrics, combinedSales, combinedLowStock, combinedChart, combinedTopItems, combinedTopDebtors,
+      ...rest
+    ] = await Promise.all([
       getDashboardMetrics(null),
       getRecentSales(null),
       getLowStockAlerts(null),
+      getRevenueChart(null),
+      getTopSellingItems(null),
+      getTopDebtors(null),
       ...branches.flatMap((b) => [
         getDashboardMetrics(b.id),
         getLowStockAlerts(b.id),
+        getRevenueChart(b.id),
+        getTopSellingItems(b.id),
+        getTopDebtors(b.id),
       ]),
     ]);
 
-    const branchMetrics = branches.map((b, i) => ({
+    const branchData = branches.map((b, i) => ({
       branch: b,
-      metrics: perBranchData[i * 2] as Awaited<ReturnType<typeof getDashboardMetrics>>,
-      lowStock: perBranchData[i * 2 + 1] as Awaited<ReturnType<typeof getLowStockAlerts>>,
+      metrics:     rest[i * 5 + 0] as Awaited<ReturnType<typeof getDashboardMetrics>>,
+      lowStock:    rest[i * 5 + 1] as Awaited<ReturnType<typeof getLowStockAlerts>>,
+      chart:       rest[i * 5 + 2] as Awaited<ReturnType<typeof getRevenueChart>>,
+      topItems:    rest[i * 5 + 3] as Awaited<ReturnType<typeof getTopSellingItems>>,
+      topDebtors:  rest[i * 5 + 4] as Awaited<ReturnType<typeof getTopDebtors>>,
     }));
 
     return (
       <BranchDashboard
         userName={session?.user?.name ?? ""}
         branches={branches}
-        combinedMetrics={combinedMetrics}
-        combinedSales={combinedSales}
-        combinedLowStock={combinedLowStock}
-        branchMetrics={branchMetrics}
+        combined={{
+          metrics:    combinedMetrics,
+          sales:      combinedSales,
+          lowStock:   combinedLowStock,
+          chart:      combinedChart,
+          topItems:   combinedTopItems,
+          topDebtors: combinedTopDebtors,
+        }}
+        branchData={branchData}
       />
     );
   }
 
   // Non-admin: scoped to their branch
-  const [metrics, recentSales, lowStockAlerts] = await Promise.all([
+  const [metrics, lowStockAlerts] = await Promise.all([
     getDashboardMetrics(branchId),
-    Promise.resolve([]),
     getLowStockAlerts(branchId),
   ]);
 
@@ -64,7 +79,6 @@ export default async function DashboardPage() {
           Welcome back, <span className="font-medium text-slate-700">{session?.user?.name}</span>
         </p>
       </div>
-
       <div className="grid grid-cols-2 gap-4">
         <MetricCard title="Sales today" value={String(metrics.todaySalesCount)} icon={ShoppingCart} color="green" />
         <MetricCard
@@ -75,7 +89,6 @@ export default async function DashboardPage() {
           subtitle={metrics.lowStockCount === 0 ? "All stocked up" : "Need restocking"}
         />
       </div>
-
       <LowStockList items={lowStockAlerts} />
     </div>
   );
