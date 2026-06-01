@@ -79,7 +79,7 @@ export function CustomerDialog({ open, onClose, customer, onSuccess, branches = 
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pt-1">
           <div className="space-y-1.5">
-            <Label htmlFor="c-name">Name</Label>
+            <Label htmlFor="c-name">Name *</Label>
             <Input id="c-name" placeholder="e.g. John Mwangi" {...register("name")} />
             {errors.name && (
               <p className="text-xs text-red-500">{errors.name.message}</p>
@@ -87,7 +87,7 @@ export function CustomerDialog({ open, onClose, customer, onSuccess, branches = 
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="c-phone">Phone</Label>
+            <Label htmlFor="c-phone">Phone *</Label>
             <Input id="c-phone" placeholder="+254 7XX XXX XXX" {...register("phone")} />
             {errors.phone && (
               <p className="text-xs text-red-500">{errors.phone.message}</p>

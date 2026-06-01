@@ -48,6 +48,38 @@ export type CustomerDetail = {
   }>;
 };
 
+// ── Customer stats ────────────────────────────────────────────────────────
+
+export type CustomerStats = {
+  total: number;
+  withCredit: number;
+  totalOutstanding: number;
+  newThisMonth: number;
+};
+
+export async function getCustomerStats(branchId?: string | null): Promise<CustomerStats> {
+  const session = await auth();
+  const effectiveBranchId = branchId !== undefined ? branchId : session?.user?.branchId ?? null;
+  const branchFilter = effectiveBranchId ? { branchId: effectiveBranchId } : {};
+
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const [total, withCredit, creditAgg, newThisMonth] = await Promise.all([
+    db.customer.count({ where: branchFilter }),
+    db.customer.count({ where: { ...branchFilter, creditBalance: { gt: 0 } } }),
+    db.customer.aggregate({ _sum: { creditBalance: true }, where: { ...branchFilter, creditBalance: { gt: 0 } } }),
+    db.customer.count({ where: { ...branchFilter, createdAt: { gte: monthStart } } }),
+  ]);
+
+  return {
+    total,
+    withCredit,
+    totalOutstanding: Number(creditAgg._sum.creditBalance ?? 0),
+    newThisMonth,
+  };
+}
+
 // ── Get customers list ────────────────────────────────────────────────────
 
 export async function getCustomers(

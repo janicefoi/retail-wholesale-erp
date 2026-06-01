@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -18,14 +18,15 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { recordCreditPayment } from "@/lib/actions/customers";
 
-const PaymentSchema = z.object({
-  amount: z
-    .number({ invalid_type_error: "Enter a valid amount" })
-    .positive("Amount must be greater than zero"),
-  notes: z.string().optional(),
-});
-
-type PaymentInput = z.infer<typeof PaymentSchema>;
+function makeSchema(maxAmount: number) {
+  return z.object({
+    amount: z
+      .number({ invalid_type_error: "Enter a valid amount" })
+      .positive("Amount must be greater than zero")
+      .max(maxAmount, `Cannot exceed the balance of KES ${maxAmount.toLocaleString("en-KE", { minimumFractionDigits: 2 })}`),
+    notes: z.string().optional(),
+  });
+}
 
 function fmtKES(n: number) {
   return `KES ${n.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -50,19 +51,25 @@ export function RecordPaymentDialog({
 }: RecordPaymentDialogProps) {
   const [serverError, setServerError] = useState<string | null>(null);
 
+  const schema = makeSchema(creditBalance);
+  type PaymentInput = z.infer<typeof schema>;
+
   const {
     register,
     handleSubmit,
     reset,
+    setValue,
     watch,
     formState: { errors, isSubmitting },
   } = useForm<PaymentInput>({
-    resolver: zodResolver(PaymentSchema),
+    resolver: zodResolver(schema),
     defaultValues: { amount: undefined, notes: "" },
   });
 
   const amountValue = watch("amount");
   const remaining = creditBalance - (Number(amountValue) || 0);
+  const isFullPayment = Number(amountValue) === creditBalance;
+  const exceedsBalance = Number(amountValue) > creditBalance;
 
   useEffect(() => {
     if (open) {
@@ -94,7 +101,16 @@ export function RecordPaymentDialog({
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pt-1">
           <div className="space-y-1.5">
-            <Label htmlFor="pay-amount">Amount paid (KES)</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="pay-amount">Amount paid (KES) *</Label>
+              <button
+                type="button"
+                onClick={() => setValue("amount", creditBalance, { shouldValidate: true })}
+                className="text-[11px] text-blue-600 hover:text-blue-700 font-medium"
+              >
+                Pay full balance
+              </button>
+            </div>
             <Input
               id="pay-amount"
               type="number"
@@ -102,18 +118,22 @@ export function RecordPaymentDialog({
               step="0.01"
               placeholder="0.00"
               {...register("amount", { valueAsNumber: true })}
-              className="tabular-nums"
+              className={cn("tabular-nums", exceedsBalance && "border-red-300 focus-visible:ring-red-400")}
             />
             {errors.amount && (
               <p className="text-xs text-red-500">{errors.amount.message}</p>
             )}
-            {amountValue > 0 && remaining >= 0 && (
-              <p className="text-xs text-slate-500">
-                Remaining balance after payment:{" "}
-                <span className={remaining === 0 ? "text-green-600 font-semibold" : "text-slate-700 font-medium"}>
-                  {fmtKES(remaining)}
-                </span>
-              </p>
+            {amountValue > 0 && !exceedsBalance && (
+              <div className={cn(
+                "flex items-center gap-1.5 text-xs",
+                isFullPayment ? "text-green-600 font-medium" : "text-slate-500"
+              )}>
+                {isFullPayment && <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />}
+                {isFullPayment
+                  ? "Full balance — account will be cleared"
+                  : <>Remaining balance: <span className="font-medium text-slate-700">{fmtKES(remaining)}</span></>
+                }
+              </div>
             )}
           </div>
 
@@ -150,4 +170,8 @@ export function RecordPaymentDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function cn(...classes: (string | boolean | undefined)[]) {
+  return classes.filter(Boolean).join(" ");
 }
