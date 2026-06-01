@@ -1,13 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ItemSearch } from "@/components/pos/item-search";
 import { CartPanel } from "@/components/pos/cart-panel";
 import { ReceiptModal } from "@/components/receipt/ReceiptModal";
+import { useCartStore } from "@/lib/store/cart";
 import type { SaleResult } from "@/lib/actions/pos";
 
 export function POSClient() {
   const [completedSale, setCompletedSale] = useState<SaleResult | null>(null);
+
+  // Rehydrate the cart from localStorage after mount (skipHydration: true in store
+  // prevents the SSR/client mismatch that would otherwise cause a hydration error).
+  useEffect(() => {
+    useCartStore.persist.rehydrate();
+  }, []);
 
   return (
     // -m-6 escapes the layout's p-6 so the POS fills the full viewport height

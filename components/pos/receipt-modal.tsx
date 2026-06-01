@@ -29,42 +29,82 @@ function formatDate(iso: string) {
 export function ReceiptModal({ sale, onClose }: ReceiptModalProps) {
   const subtotal = sale.items.reduce((sum, i) => sum + Number(i.subtotal), 0);
   const discount = Number(sale.discountAmount);
+  const tax = Number(sale.taxAmount);
   const total = Number(sale.totalAmount);
+  const branch = sale.branch;
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="sm:max-w-sm p-0 overflow-hidden">
-        {/* Success header */}
-        <div className="bg-green-50 px-6 py-5 flex flex-col items-center gap-1 border-b border-green-100">
-          <CheckCircle className="h-8 w-8 text-green-500" />
-          <h2 className="text-base font-bold text-green-800">Sale Complete</h2>
-          <p className="font-mono text-xs text-green-600">{sale.receiptNumber}</p>
-          <p className="text-[10px] text-green-500">{formatDate(sale.createdAt)}</p>
+        {/* Success banner */}
+        <div className="bg-green-50 px-4 py-3 flex items-center gap-2 border-b border-green-100">
+          <CheckCircle className="h-5 w-5 text-green-500 shrink-0" />
+          <p className="text-sm font-semibold text-green-800">Sale Complete</p>
         </div>
 
         {/* Receipt body */}
-        <div className="px-6 py-4 space-y-3 max-h-[50vh] overflow-y-auto">
+        <div className="px-6 py-4 space-y-3 max-h-[65vh] overflow-y-auto text-xs">
 
-          {/* Meta */}
-          <div className="flex justify-between text-xs text-slate-500">
-            <span>Sale type</span>
-            <span className="font-medium text-slate-700">{sale.saleType}</span>
+          {/* Branch header */}
+          <div className="text-center space-y-0.5 pb-1">
+            <p className="font-bold text-sm text-slate-900 uppercase tracking-wide">
+              JSH Motorcycle Spare Parts
+            </p>
+            {branch?.name && (
+              <p className="font-semibold text-slate-700">{branch.name}</p>
+            )}
+            {branch?.address && (
+              <p className="text-slate-500">{branch.address}</p>
+            )}
+            {branch?.phone && (
+              <p className="text-slate-500">Tel: {branch.phone}</p>
+            )}
+            {branch?.paybill && (
+              <p className="text-slate-500">Paybill: <span className="font-medium text-slate-700">{branch.paybill}</span></p>
+            )}
+            {branch?.pin && (
+              <p className="text-slate-500">PIN: <span className="font-medium text-slate-700">{branch.pin}</span></p>
+            )}
           </div>
-          <div className="flex justify-between text-xs text-slate-500">
-            <span>Payment</span>
-            <span className={`font-medium ${sale.paymentStatus === "CREDIT" ? "text-amber-600" : "text-green-600"}`}>
-              {sale.paymentStatus}
-            </span>
-          </div>
-          {sale.customer && (
-            <div className="flex justify-between text-xs text-slate-500">
-              <span>Customer</span>
-              <span className="font-medium text-slate-700">{sale.customer.name}</span>
+
+          <Separator />
+
+          {/* Receipt number & date */}
+          <div className="space-y-0.5">
+            <div className="flex justify-between text-slate-500">
+              <span>Receipt #</span>
+              <span className="font-mono font-medium text-slate-700">{sale.receiptNumber}</span>
             </div>
-          )}
-          <div className="flex justify-between text-xs text-slate-500">
-            <span>Served by</span>
-            <span className="font-medium text-slate-700">{sale.employee.name}</span>
+            <div className="flex justify-between text-slate-500">
+              <span>Date</span>
+              <span className="text-slate-700">{formatDate(sale.createdAt)}</span>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Transaction meta */}
+          <div className="space-y-0.5">
+            <div className="flex justify-between text-slate-500">
+              <span>Sale type</span>
+              <span className="font-medium text-slate-700">{sale.saleType}</span>
+            </div>
+            <div className="flex justify-between text-slate-500">
+              <span>Payment</span>
+              <span className={`font-medium ${sale.paymentStatus === "CREDIT" ? "text-amber-600" : "text-green-600"}`}>
+                {sale.paymentStatus}
+              </span>
+            </div>
+            {sale.customer && (
+              <div className="flex justify-between text-slate-500">
+                <span>Customer</span>
+                <span className="font-medium text-slate-700">{sale.customer.name}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-slate-500">
+              <span>Served by</span>
+              <span className="font-medium text-slate-700">{sale.employee.name}</span>
+            </div>
           </div>
 
           <Separator />
@@ -75,10 +115,10 @@ export function ReceiptModal({ sale, onClose }: ReceiptModalProps) {
               <div key={idx}>
                 <div className="flex justify-between items-start gap-2">
                   <div className="min-w-0">
-                    <p className="text-xs font-medium text-slate-800 truncate">{line.item.name}</p>
+                    <p className="font-medium text-slate-800 truncate">{line.item.name}</p>
                     <p className="text-[10px] text-slate-400 font-mono">{line.item.sku}</p>
                   </div>
-                  <p className="text-xs font-semibold text-slate-800 tabular-nums shrink-0">
+                  <p className="font-semibold text-slate-800 tabular-nums shrink-0">
                     {fmt(line.subtotal)}
                   </p>
                 </div>
@@ -93,21 +133,27 @@ export function ReceiptModal({ sale, onClose }: ReceiptModalProps) {
 
           {/* Totals */}
           <div className="space-y-1">
-            <div className="flex justify-between text-xs text-slate-500">
+            <div className="flex justify-between text-slate-500">
               <span>Subtotal</span>
               <span className="tabular-nums">{fmt(subtotal)}</span>
             </div>
             {discount > 0 && (
-              <div className="flex justify-between text-xs text-red-500">
+              <div className="flex justify-between text-red-500">
                 <span>Discount</span>
                 <span className="tabular-nums">− {fmt(discount)}</span>
               </div>
             )}
-            <div className="flex justify-between text-sm font-bold text-slate-900 pt-1">
+            <div className="flex justify-between text-slate-500">
+              <span>VAT (16% incl.)</span>
+              <span className="tabular-nums">{fmt(tax)}</span>
+            </div>
+            <div className="flex justify-between font-bold text-slate-900 text-sm pt-1 border-t border-slate-200">
               <span>Total</span>
               <span className="tabular-nums">{fmt(total)}</span>
             </div>
           </div>
+
+          <p className="text-center text-[10px] text-slate-400 pt-1">Thank you for your business!</p>
         </div>
 
         {/* Actions */}

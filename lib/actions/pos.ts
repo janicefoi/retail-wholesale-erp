@@ -42,6 +42,9 @@ export async function searchItems(query: string): Promise<SearchedItem[]> {
   const q = query.trim();
   if (!q) return [];
 
+  const session = await auth();
+  const branchId = session?.user?.branchId ?? null;
+
   const rows = await db.item.findMany({
     where: {
       isActive: true,
@@ -55,16 +58,25 @@ export async function searchItems(query: string): Promise<SearchedItem[]> {
       name: true,
       sku: true,
       category: true,
-      stockQty: true,
       retailPrice: true,
       wholesalePrice: true,
       specialPrice: true,
+      branchStocks: branchId ? { where: { branchId } } : true,
     },
     take: 15,
     orderBy: { name: "asc" },
   });
 
-  return JSON.parse(JSON.stringify(rows));
+  return JSON.parse(JSON.stringify(
+    rows.map((r) => ({
+      ...r,
+      stockQty: (branchId
+        ? r.branchStocks.find((bs: { branchId: string; stockQty: number }) => bs.branchId === branchId)
+        : r.branchStocks[0]
+      )?.stockQty ?? 0,
+      branchStocks: undefined,
+    }))
+  ));
 }
 
 // ── Customer search ───────────────────────────────────────────────────────
@@ -106,6 +118,7 @@ export type SaleResult = {
   taxAmount: string;
   totalAmount: string;
   createdAt: string;
+  branch: { name: string; address: string | null; phone: string | null; paybill: string | null; pin: string | null } | null;
   customer: { name: string; phone: string; creditBalance: string } | null;
   employee: { name: string };
   items: Array<{
@@ -135,7 +148,13 @@ export async function completeSale(
 
   // Sanity-check: totalAmount must equal itemsTotal − discount (VAT is inclusive in prices)
   const itemsTotal = parsed.data.items.reduce((sum, i) => sum + i.subtotal, 0);
+  if (parsed.data.discountAmount > itemsTotal) {
+    return { success: false, error: "Discount cannot exceed the total item value." };
+  }
   const expectedTotal = +(itemsTotal - parsed.data.discountAmount).toFixed(2);
+  if (expectedTotal <= 0) {
+    return { success: false, error: "Sale total must be greater than zero after discount." };
+  }
   if (Math.abs(expectedTotal - parsed.data.totalAmount) > 0.02) {
     return { success: false, error: "Total amount mismatch — please try again." };
   }
@@ -143,20 +162,28 @@ export async function completeSale(
   // Compute taxAmount server-side: extract the VAT already contained in the total
   const computedTax = Math.round(parsed.data.totalAmount * VAT_EXTRACT * 100) / 100;
 
+  const branchId = session.user.branchId;
+  if (!branchId) return { success: false, error: "Your account has no branch assigned. Please contact the admin." };
+
   const receiptNumber = await generateReceiptNumber();
 
   try {
     const sale = await db.$transaction(async (tx) => {
-      // 1. Verify stock availability
+      // 1. Verify stock availability at this branch
       for (const line of parsed.data.items) {
         const item = await tx.item.findUnique({
           where: { id: line.itemId },
-          select: { stockQty: true, name: true, isActive: true },
+          select: { name: true, isActive: true },
         });
         if (!item || !item.isActive) throw new Error(`Item not found or has been deactivated.`);
-        if (item.stockQty < line.quantity) {
+
+        const branchStock = await tx.branchStock.findUnique({
+          where: { itemId_branchId: { itemId: line.itemId, branchId } },
+        });
+        const available = branchStock?.stockQty ?? 0;
+        if (available < line.quantity) {
           throw new Error(
-            `Insufficient stock for "${item.name}". Available: ${item.stockQty}, requested: ${line.quantity}.`
+            `Insufficient stock for "${item.name}" at this branch. Available: ${available}, requested: ${line.quantity}.`
           );
         }
       }
@@ -173,6 +200,7 @@ export async function completeSale(
           isVoid: false,
           customerId: parsed.data.customerId,
           employeeId: session.user.id,
+          branchId,
           items: {
             create: parsed.data.items.map((i) => ({
               itemId: i.itemId,
@@ -184,15 +212,16 @@ export async function completeSale(
         },
         include: {
           items: { include: { item: { select: { name: true, sku: true } } } },
+          branch: { select: { name: true, address: true, phone: true, paybill: true, pin: true } },
           customer: { select: { name: true, phone: true, creditBalance: true } },
           employee: { select: { name: true } },
         },
       });
 
-      // 3. Decrement stock
+      // 3. Decrement branch stock
       for (const line of parsed.data.items) {
-        await tx.item.update({
-          where: { id: line.itemId },
+        await tx.branchStock.update({
+          where: { itemId_branchId: { itemId: line.itemId, branchId } },
           data: { stockQty: { decrement: line.quantity } },
         });
       }
@@ -232,6 +261,7 @@ export async function getSaleById(id: string): Promise<SaleResult | null> {
     where: { id },
     include: {
       items: { include: { item: { select: { name: true, sku: true } } } },
+      branch: { select: { name: true, address: true, phone: true, paybill: true, pin: true } },
       customer: { select: { name: true, phone: true, creditBalance: true } },
       employee: { select: { name: true } },
     },

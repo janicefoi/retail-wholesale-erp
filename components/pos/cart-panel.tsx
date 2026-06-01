@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Loader2, AlertCircle } from "lucide-react";
+import { useState, useTransition, useEffect } from "react";
+import { Loader2, AlertCircle, RotateCcw, X, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { CustomerSearch } from "@/components/pos/customer-search";
@@ -24,6 +24,18 @@ interface CartPanelProps {
 export function CartPanel({ onSaleComplete }: CartPanelProps) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [showRestored, setShowRestored] = useState(false);
+  // Start as true to match SSR; corrected on mount via effect
+  const [isOnline, setIsOnline] = useState(true);
+
+  useEffect(() => {
+    setIsOnline(navigator.onLine);
+    const up = () => setIsOnline(true);
+    const down = () => setIsOnline(false);
+    window.addEventListener("online", up);
+    window.addEventListener("offline", down);
+    return () => { window.removeEventListener("online", up); window.removeEventListener("offline", down); };
+  }, []);
 
   const {
     items,
@@ -41,6 +53,17 @@ export function CartPanel({ onSaleComplete }: CartPanelProps) {
     taxAmount,
     total,
   } = useCartStore();
+
+  // Show banner when rehydration brings in items (items go from 0 → >0 on first load)
+  useEffect(() => {
+    const unsub = useCartStore.subscribe((state, prev) => {
+      if (prev.items.length === 0 && state.items.length > 0) {
+        setShowRestored(true);
+        unsub();
+      }
+    });
+    return unsub;
+  }, []);
 
   const sub = subtotal();
   const tax = taxAmount();
@@ -63,34 +86,76 @@ export function CartPanel({ onSaleComplete }: CartPanelProps) {
       return;
     }
 
-    setError(null);
-    startTransition(async () => {
-      const result = await completeSale({
-        items: items.map((i) => ({
-          itemId: i.itemId,
-          quantity: i.quantity,
-          unitPrice: i.unitPrice,
-          subtotal: i.subtotal,
-        })),
-        saleType,
-        paymentStatus,
-        customerId,
-        discountAmount,
-        totalAmount: tot,
+    // Verify actual server reachability before attempting the sale.
+    // navigator.onLine is unreliable (loopback stays "online" even with WiFi off),
+    // so we ping the server directly.
+    try {
+      const ping = await fetch("/api/ping", {
+        method: "GET",
+        cache: "no-store",
+        signal: AbortSignal.timeout(3000),
       });
+      if (!ping.ok) throw new Error("ping failed");
+    } catch {
+      setIsOnline(false);
+      setError("No connection to server — your cart is saved and will be ready when you reconnect.");
+      return;
+    }
 
-      if (!result.success) {
-        setError(result.error);
-        return;
+    setIsOnline(true);
+    setError(null);
+
+    startTransition(async () => {
+      try {
+        const result = await completeSale({
+          items: items.map((i) => ({
+            itemId: i.itemId,
+            quantity: i.quantity,
+            unitPrice: i.unitPrice,
+            subtotal: i.subtotal,
+          })),
+          saleType,
+          paymentStatus,
+          customerId,
+          discountAmount,
+          totalAmount: tot,
+        });
+
+        if (!result.success) {
+          setError(result.error);
+          return;
+        }
+
+        clearCart();
+        onSaleComplete(result.sale);
+      } catch {
+        setIsOnline(false);
+        setError("Connection lost during sale — your cart is saved. Please try again when reconnected.");
       }
-
-      clearCart();
-      onSaleComplete(result.sale);
     });
   }
 
   return (
     <div className="flex flex-col h-full">
+
+      {/* ── Offline banner ────────────────────────────────────────────── */}
+      {!isOnline && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-red-50 border-b border-red-200 text-red-800 text-xs">
+          <WifiOff className="h-3.5 w-3.5 shrink-0 text-red-600" />
+          <span>No internet connection — sales cannot be processed until you reconnect.</span>
+        </div>
+      )}
+
+      {/* ── Restored cart banner ──────────────────────────────────────── */}
+      {showRestored && items.length > 0 && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border-b border-amber-200 text-amber-800 text-xs">
+          <RotateCcw className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+          <span className="flex-1">Cart restored from your last session.</span>
+          <button onClick={() => setShowRestored(false)} className="shrink-0 hover:text-amber-900">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* ── Sale type ─────────────────────────────────────────────────── */}
       <div className="px-3 py-3 border-b border-slate-100">
@@ -233,7 +298,7 @@ export function CartPanel({ onSaleComplete }: CartPanelProps) {
         {/* Complete button */}
         <Button
           className="w-full h-10 text-sm font-semibold"
-          disabled={items.length === 0 || isPending || !!discountError}
+          disabled={items.length === 0 || isPending || !!discountError || !isOnline}
           onClick={handleCompleteSale}
         >
           {isPending ? (
