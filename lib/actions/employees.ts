@@ -20,6 +20,8 @@ export type EmployeeRow = {
   role: string;
   isActive: boolean;
   createdAt: string;
+  branchId: string | null;
+  branch: { id: string; name: string } | null;
 };
 
 // ── Guard ─────────────────────────────────────────────────────────────────
@@ -45,6 +47,8 @@ export async function getEmployees(): Promise<EmployeeRow[]> {
       role: true,
       isActive: true,
       createdAt: true,
+      branchId: true,
+      branch: { select: { id: true, name: true } },
     },
     orderBy: { name: "asc" },
   });
@@ -74,12 +78,14 @@ export async function createEmployee(
       data: {
         name: parsed.data.name,
         email: parsed.data.email,
-        role: parsed.data.role,
+        role: parsed.data.role as "ADMIN" | "MANAGER" | "CASHIER",
         passwordHash,
+        branchId: parsed.data.branchId ?? null,
       },
     });
 
     revalidatePath("/admin/employees");
+    revalidatePath("/admin/branches");
     return { success: true };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : "Failed to create employee." };
@@ -112,10 +118,16 @@ export async function updateEmployee(
 
     await db.user.update({
       where: { id },
-      data: { name: parsed.data.name, email: parsed.data.email, role: parsed.data.role },
+      data: {
+        name: parsed.data.name,
+        email: parsed.data.email,
+        role: parsed.data.role as "ADMIN" | "MANAGER" | "CASHIER",
+        branchId: parsed.data.branchId ?? null,
+      },
     });
 
     revalidatePath("/admin/employees");
+    revalidatePath("/admin/branches");
     return { success: true };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : "Failed to update employee." };
