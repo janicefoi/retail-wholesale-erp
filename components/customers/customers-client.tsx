@@ -29,9 +29,13 @@ function fmtKES(v: string | number) {
 
 interface Props {
   customers: CustomerRow[];
+  role: string;
+  branches?: { id: string; name: string }[];
 }
 
-export function CustomersClient({ customers }: Props) {
+export function CustomersClient({ customers, role, branches = [] }: Props) {
+  const canEdit = role !== "CASHIER";
+  const isAdmin = role === "ADMIN";
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [filter, setFilter] = useState<Filter>("ALL");
@@ -120,6 +124,7 @@ export function CustomersClient({ customers }: Props) {
               <TableHead className="min-w-[180px]">Name</TableHead>
               <TableHead className="w-36">Phone</TableHead>
               <TableHead className="w-48">Address</TableHead>
+              {isAdmin && <TableHead className="w-36">Branch</TableHead>}
               <TableHead className="w-28 text-right whitespace-nowrap">Credit balance</TableHead>
               <TableHead className="w-20 text-right whitespace-nowrap">Sales</TableHead>
               <TableHead className="w-16 text-right whitespace-nowrap">Actions</TableHead>
@@ -128,7 +133,7 @@ export function CustomersClient({ customers }: Props) {
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-12 text-center text-slate-400">
+                <TableCell colSpan={isAdmin ? 7 : 6} className="py-12 text-center text-slate-400">
                   <Users className="h-7 w-7 mx-auto mb-1.5 opacity-30" />
                   <p className="text-xs">
                     {search || filter !== "ALL"
@@ -165,6 +170,18 @@ export function CustomersClient({ customers }: Props) {
                       </span>
                     </TableCell>
 
+                    {isAdmin && (
+                      <TableCell className="text-xs whitespace-nowrap">
+                        {c.branch ? (
+                          <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
+                            {c.branch.name}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </TableCell>
+                    )}
+
                     <TableCell className="text-right whitespace-nowrap">
                       <span
                         className={cn(
@@ -183,19 +200,21 @@ export function CustomersClient({ customers }: Props) {
                     </TableCell>
 
                     <TableCell className="text-right">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-6 w-6 text-slate-400 hover:text-blue-600"
-                        title="Edit customer"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditCustomer(c);
-                          setDialogOpen(true);
-                        }}
-                      >
-                        <Pencil className="h-3 w-3" />
-                      </Button>
+                      {canEdit && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-6 w-6 text-slate-400 hover:text-blue-600"
+                          title="Edit customer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditCustomer(c);
+                            setDialogOpen(true);
+                          }}
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 );
@@ -217,6 +236,8 @@ export function CustomersClient({ customers }: Props) {
         onClose={() => { setDialogOpen(false); setEditCustomer(null); }}
         customer={editCustomer}
         onSuccess={handleSuccess}
+        branches={branches}
+        role={role}
       />
     </div>
   );

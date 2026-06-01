@@ -23,28 +23,35 @@ interface CustomerDialogProps {
   onClose: () => void;
   customer: CustomerRow | null;
   onSuccess: () => void;
+  branches?: { id: string; name: string }[];
+  role?: string;
 }
 
-export function CustomerDialog({ open, onClose, customer, onSuccess }: CustomerDialogProps) {
+export function CustomerDialog({ open, onClose, customer, onSuccess, branches = [], role }: CustomerDialogProps) {
   const isEditing = customer !== null;
+  const isAdmin = role === "ADMIN";
   const [serverError, setServerError] = useState<string | null>(null);
 
   const {
     register,
     handleSubmit,
     reset,
+    setValue,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<CustomerInput>({
     resolver: zodResolver(CustomerSchema),
-    defaultValues: { name: "", phone: "", address: "" },
+    defaultValues: { name: "", phone: "", address: "", branchId: null },
   });
+
+  const selectedBranchId = watch("branchId");
 
   useEffect(() => {
     if (open) {
       reset(
         customer
-          ? { name: customer.name, phone: customer.phone, address: customer.address ?? "" }
-          : { name: "", phone: "", address: "" }
+          ? { name: customer.name, phone: customer.phone, address: customer.address ?? "", branchId: customer.branchId }
+          : { name: "", phone: "", address: "", branchId: null }
       );
       setServerError(null);
     }
@@ -99,6 +106,23 @@ export function CustomerDialog({ open, onClose, customer, onSuccess }: CustomerD
               className="resize-none"
             />
           </div>
+
+          {isAdmin && branches.length > 0 && (
+            <div className="space-y-1.5">
+              <Label htmlFor="c-branch">Branch</Label>
+              <select
+                id="c-branch"
+                value={selectedBranchId ?? ""}
+                onChange={(e) => setValue("branchId", e.target.value || null)}
+                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+              >
+                <option value="">— No branch —</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {serverError && (
             <div className="flex items-start gap-2 rounded-md bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">

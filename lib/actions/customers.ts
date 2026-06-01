@@ -14,6 +14,8 @@ export type CustomerRow = {
   address: string | null;
   creditBalance: string;
   createdAt: string;
+  branchId: string | null;
+  branch: { name: string } | null;
   _count: { sales: number };
 };
 
@@ -25,6 +27,8 @@ export type CustomerDetail = {
   creditBalance: string;
   createdAt: string;
   updatedAt: string;
+  branchId: string | null;
+  branch: { name: string; address: string | null; phone: string | null; paybill: string | null } | null;
   sales: Array<{
     id: string;
     receiptNumber: string;
@@ -47,14 +51,17 @@ export type CustomerDetail = {
 // ── Get customers list ────────────────────────────────────────────────────
 
 export async function getCustomers(
-  filter: "ALL" | "HAS_CREDIT" | "NO_CREDIT" = "ALL"
+  filter: "ALL" | "HAS_CREDIT" | "NO_CREDIT" = "ALL",
+  branchId?: string | null
 ): Promise<CustomerRow[]> {
-  const where =
-    filter === "HAS_CREDIT"
-      ? { creditBalance: { gt: 0 } }
-      : filter === "NO_CREDIT"
-      ? { creditBalance: { lte: 0 } }
-      : {};
+  const session = await auth();
+  const effectiveBranchId = branchId !== undefined ? branchId : session?.user?.branchId ?? null;
+
+  const where = {
+    ...(effectiveBranchId ? { branchId: effectiveBranchId } : {}),
+    ...(filter === "HAS_CREDIT" ? { creditBalance: { gt: 0 } } : {}),
+    ...(filter === "NO_CREDIT" ? { creditBalance: { lte: 0 } } : {}),
+  };
 
   const rows = await db.customer.findMany({
     where,
@@ -65,6 +72,8 @@ export async function getCustomers(
       address: true,
       creditBalance: true,
       createdAt: true,
+      branchId: true,
+      branch: { select: { name: true } },
       _count: { select: { sales: true } },
     },
     orderBy: { name: "asc" },
@@ -91,15 +100,20 @@ export async function createCustomer(
     return { success: false, error: "A customer with this phone number already exists." };
   }
 
+  // Use explicitly-selected branchId (admin only), otherwise fall back to session branch
+  const branchId = parsed.data.branchId ?? session.user.branchId ?? null;
+
   await db.customer.create({
     data: {
       name: parsed.data.name,
       phone: parsed.data.phone,
       address: parsed.data.address ?? null,
+      branchId,
     },
   });
 
   revalidatePath("/customers");
+  revalidatePath("/admin/branches");
   return { success: true };
 }
 
@@ -111,6 +125,7 @@ export async function updateCustomer(
 ): Promise<{ success: true } | { success: false; error: string }> {
   const session = await auth();
   if (!session?.user?.id) return { success: false, error: "Unauthorized" };
+  if (session.user.role === "CASHIER") return { success: false, error: "You don't have permission to edit customers." };
 
   const parsed = CustomerSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.errors[0].message };
@@ -128,11 +143,13 @@ export async function updateCustomer(
       name: parsed.data.name,
       phone: parsed.data.phone,
       address: parsed.data.address ?? null,
+      ...(session.user.role === "ADMIN" && { branchId: parsed.data.branchId ?? null }),
     },
   });
 
   revalidatePath("/customers");
   revalidatePath(`/customers/${id}`);
+  revalidatePath("/admin/branches");
   return { success: true };
 }
 
@@ -195,6 +212,7 @@ export async function getCustomerDetail(id: string): Promise<CustomerDetail | nu
   const customer = await db.customer.findUnique({
     where: { id },
     include: {
+      branch: { select: { name: true, address: true, phone: true, paybill: true } },
       sales: {
         select: {
           id: true,

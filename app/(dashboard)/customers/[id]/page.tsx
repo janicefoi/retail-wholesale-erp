@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { auth } from "@/auth";
 import { getCustomerDetail } from "@/lib/actions/customers";
 import { CustomerDetailClient } from "@/components/customers/customer-detail-client";
 
@@ -14,7 +15,7 @@ export async function generateMetadata({ params }: Props) {
 
 export default async function CustomerDetailPage({ params }: Props) {
   const { id } = await params;
-  const customer = await getCustomerDetail(id);
+  const [session, customer] = await Promise.all([auth(), getCustomerDetail(id)]);
   if (!customer) notFound();
-  return <CustomerDetailClient customer={customer} />;
+  return <CustomerDetailClient customer={customer} role={session?.user?.role ?? "CASHIER"} />;
 }
