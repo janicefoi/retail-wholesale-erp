@@ -79,13 +79,13 @@ export function SupplierDialog({ open, onClose, supplier, onSuccess }: SupplierD
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pt-1">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label htmlFor="s-name">Name</Label>
+              <Label htmlFor="s-name">Name *</Label>
               <Input id="s-name" placeholder="e.g. Kamau Spares Ltd" {...register("name")} />
               {errors.name && <p className="text-xs text-red-500">{errors.name.message}</p>}
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="s-phone">Phone</Label>
+              <Label htmlFor="s-phone">Phone *</Label>
               <Input id="s-phone" placeholder="+254 7XX XXX XXX" {...register("phone")} />
               {errors.phone && <p className="text-xs text-red-500">{errors.phone.message}</p>}
             </div>

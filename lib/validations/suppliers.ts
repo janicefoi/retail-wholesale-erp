@@ -32,6 +32,7 @@ export const PurchaseOrderSchema = z.object({
   costPrice: z
     .number({ invalid_type_error: "Enter a valid price" })
     .positive("Cost price must be greater than zero"),
+  branchId: z.string().nullable().optional(),
 });
 
 export type PurchaseOrderInput = z.infer<typeof PurchaseOrderSchema>;

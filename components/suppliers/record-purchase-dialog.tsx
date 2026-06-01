@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, AlertCircle, Package } from "lucide-react";
+import { Loader2, AlertCircle, Package, AlertTriangle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -31,6 +31,9 @@ interface RecordPurchaseDialogProps {
   supplierName: string;
   items: SupplierItem[];
   onSuccess: () => void;
+  isAdmin?: boolean;
+  branches?: { id: string; name: string }[];
+  defaultBranchId?: string | null;
 }
 
 export function RecordPurchaseDialog({
@@ -40,6 +43,9 @@ export function RecordPurchaseDialog({
   supplierName,
   items,
   onSuccess,
+  isAdmin = false,
+  branches = [],
+  defaultBranchId,
 }: RecordPurchaseDialogProps) {
   const [serverError, setServerError] = useState<string | null>(null);
   const activeItems = items.filter((i) => i.isActive);
@@ -49,6 +55,7 @@ export function RecordPurchaseDialog({
     handleSubmit,
     reset,
     watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<PurchaseOrderInput>({
     resolver: zodResolver(PurchaseOrderSchema),
@@ -57,15 +64,19 @@ export function RecordPurchaseDialog({
       itemId: "",
       quantity: undefined,
       costPrice: undefined,
+      branchId: defaultBranchId ?? null,
     },
   });
 
   const qty = watch("quantity");
   const price = watch("costPrice");
+  const selectedItemId = watch("itemId");
+  const selectedBranchId = watch("branchId");
   const totalCost = (Number(qty) || 0) * (Number(price) || 0);
 
-  const selectedItemId = watch("itemId");
   const selectedItem = activeItems.find((i) => i.id === selectedItemId);
+  const retailPrice = selectedItem ? Number(selectedItem.retailPrice) : 0;
+  const costExceedsRetail = Number(price) > 0 && retailPrice > 0 && Number(price) > retailPrice;
 
   useEffect(() => {
     if (open) {
@@ -74,10 +85,11 @@ export function RecordPurchaseDialog({
         itemId: activeItems.length === 1 ? activeItems[0].id : "",
         quantity: undefined,
         costPrice: undefined,
+        branchId: defaultBranchId ?? null,
       });
       setServerError(null);
     }
-  }, [open, supplierId, activeItems.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, supplierId, activeItems.length, defaultBranchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function onSubmit(data: PurchaseOrderInput) {
     setServerError(null);
@@ -108,12 +120,29 @@ export function RecordPurchaseDialog({
           </div>
         ) : (
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pt-1">
-            {/* Hidden supplierId */}
             <input type="hidden" {...register("supplierId")} />
+
+            {/* Branch selector (admin only) */}
+            {isAdmin && branches.length > 0 && (
+              <div className="space-y-1.5">
+                <Label htmlFor="po-branch">Branch *</Label>
+                <select
+                  id="po-branch"
+                  value={selectedBranchId ?? ""}
+                  onChange={(e) => setValue("branchId", e.target.value || null)}
+                  className="w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  <option value="">— Select branch —</option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Item select */}
             <div className="space-y-1.5">
-              <Label htmlFor="po-item">Item</Label>
+              <Label htmlFor="po-item">Item *</Label>
               <select
                 id="po-item"
                 {...register("itemId")}
@@ -126,21 +155,18 @@ export function RecordPurchaseDialog({
                   </option>
                 ))}
               </select>
-              {errors.itemId && (
-                <p className="text-xs text-red-500">{errors.itemId.message}</p>
-              )}
+              {errors.itemId && <p className="text-xs text-red-500">{errors.itemId.message}</p>}
               {selectedItem && (
                 <p className="text-[11px] text-slate-400">
                   Current stock: <span className="font-medium text-slate-600">{selectedItem.stockQty}</span>
-                  {" · "}Retail: <span className="font-medium text-slate-600">{fmtKES(Number(selectedItem.retailPrice))}</span>
+                  {" · "}Retail: <span className="font-medium text-slate-600">{fmtKES(retailPrice)}</span>
                 </p>
               )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              {/* Quantity */}
               <div className="space-y-1.5">
-                <Label htmlFor="po-qty">Quantity</Label>
+                <Label htmlFor="po-qty">Quantity *</Label>
                 <Input
                   id="po-qty"
                   type="number"
@@ -150,14 +176,11 @@ export function RecordPurchaseDialog({
                   {...register("quantity", { valueAsNumber: true })}
                   className="tabular-nums"
                 />
-                {errors.quantity && (
-                  <p className="text-xs text-red-500">{errors.quantity.message}</p>
-                )}
+                {errors.quantity && <p className="text-xs text-red-500">{errors.quantity.message}</p>}
               </div>
 
-              {/* Cost price per unit */}
               <div className="space-y-1.5">
-                <Label htmlFor="po-price">Cost price / unit (KES)</Label>
+                <Label htmlFor="po-price">Cost price / unit (KES) *</Label>
                 <Input
                   id="po-price"
                   type="number"
@@ -167,19 +190,23 @@ export function RecordPurchaseDialog({
                   {...register("costPrice", { valueAsNumber: true })}
                   className="tabular-nums"
                 />
-                {errors.costPrice && (
-                  <p className="text-xs text-red-500">{errors.costPrice.message}</p>
-                )}
+                {errors.costPrice && <p className="text-xs text-red-500">{errors.costPrice.message}</p>}
               </div>
             </div>
+
+            {/* Cost > retail warning */}
+            {costExceedsRetail && (
+              <div className="flex items-start gap-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">
+                <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                Cost price ({fmtKES(Number(price))}) exceeds the retail price ({fmtKES(retailPrice)}) — this item would be sold at a loss.
+              </div>
+            )}
 
             {/* Total cost preview */}
             {totalCost > 0 && (
               <div className="rounded-md bg-slate-50 border border-slate-100 px-3 py-2 flex justify-between items-center">
                 <span className="text-xs text-slate-500">Total purchase cost</span>
-                <span className="text-sm font-bold tabular-nums text-slate-800">
-                  {fmtKES(totalCost)}
-                </span>
+                <span className="text-sm font-bold tabular-nums text-slate-800">{fmtKES(totalCost)}</span>
               </div>
             )}
 

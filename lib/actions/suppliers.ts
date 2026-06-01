@@ -53,6 +53,26 @@ export type SupplierDetail = {
   }>;
 };
 
+// ── Supplier stats ────────────────────────────────────────────────────────
+
+export type SupplierStats = {
+  total: number;
+  totalItems: number;
+  totalOrders: number;
+  totalSpend: number;
+};
+
+export async function getSupplierStats(): Promise<SupplierStats> {
+  const [total, totalItems, totalOrders, orders] = await Promise.all([
+    db.supplier.count(),
+    db.item.count({ where: { supplierId: { not: null } } }),
+    db.purchaseOrder.count(),
+    db.purchaseOrder.findMany({ select: { quantity: true, costPrice: true } }),
+  ]);
+  const totalSpend = orders.reduce((s, o) => s + o.quantity * Number(o.costPrice), 0);
+  return { total, totalItems, totalOrders, totalSpend };
+}
+
 // ── Get suppliers list ────────────────────────────────────────────────────
 
 export async function getSuppliers(): Promise<SupplierRow[]> {
@@ -149,14 +169,22 @@ export async function recordPurchaseOrder(
 ): Promise<{ success: true } | { success: false; error: string }> {
   const session = await auth();
   if (!session?.user?.id) return { success: false, error: "Unauthorized" };
-  if (session.user.role !== "ADMIN") return { success: false, error: "Only admins can record purchase orders." };
+  if (session.user.role === "CASHIER") return { success: false, error: "You don't have permission to record purchase orders." };
 
   const parsed = PurchaseOrderSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.errors[0].message };
 
+  // Admin must explicitly provide a branchId; managers use their session branch
+  const branchId = session.user.role === "ADMIN"
+    ? (parsed.data.branchId ?? null)
+    : session.user.branchId;
+
+  if (!branchId) {
+    return { success: false, error: "Please select a branch to stock into." };
+  }
+
   try {
     await db.$transaction(async (tx) => {
-      // Verify item belongs to this supplier
       const item = await tx.item.findUnique({
         where: { id: parsed.data.itemId },
         select: { supplierId: true, name: true, isActive: true },
@@ -167,9 +195,6 @@ export async function recordPurchaseOrder(
         throw new Error("This item does not belong to the selected supplier.");
       }
 
-      const branchId = session.user.branchId;
-
-      // Create PurchaseOrder record
       await tx.purchaseOrder.create({
         data: {
           supplierId: parsed.data.supplierId,
@@ -177,18 +202,15 @@ export async function recordPurchaseOrder(
           quantity: parsed.data.quantity,
           costPrice: parsed.data.costPrice,
           recordedById: session.user.id,
-          branchId: branchId ?? null,
+          branchId,
         },
       });
 
-      // Increment branch stock
-      if (branchId) {
-        await tx.branchStock.upsert({
-          where: { itemId_branchId: { itemId: parsed.data.itemId, branchId } },
-          update: { stockQty: { increment: parsed.data.quantity } },
-          create: { itemId: parsed.data.itemId, branchId, stockQty: parsed.data.quantity, lowStockThreshold: 5 },
-        });
-      }
+      await tx.branchStock.upsert({
+        where: { itemId_branchId: { itemId: parsed.data.itemId, branchId } },
+        update: { stockQty: { increment: parsed.data.quantity } },
+        create: { itemId: parsed.data.itemId, branchId, stockQty: parsed.data.quantity, lowStockThreshold: 5 },
+      });
     });
 
     revalidatePath(`/suppliers/${parsed.data.supplierId}`);

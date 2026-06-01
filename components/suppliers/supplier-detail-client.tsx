@@ -34,11 +34,14 @@ function fmtDateTime(iso: string) {
 interface Props {
   supplier: SupplierDetail;
   role: string;
+  branches?: { id: string; name: string }[];
+  userBranchId?: string | null;
 }
 
-export function SupplierDetailClient({ supplier, role }: Props) {
+export function SupplierDetailClient({ supplier, role, branches = [], userBranchId }: Props) {
   const canEdit = role !== "CASHIER";
-  const canRecordPurchase = role === "ADMIN";
+  const isAdmin = role === "ADMIN";
+  const canRecordPurchase = role !== "CASHIER";
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [editOpen, setEditOpen] = useState(false);
@@ -329,6 +332,9 @@ export function SupplierDetailClient({ supplier, role }: Props) {
         supplierName={supplier.name}
         items={supplier.items}
         onSuccess={handleSuccess}
+        isAdmin={isAdmin}
+        branches={branches}
+        defaultBranchId={userBranchId}
       />
     </div>
   );
