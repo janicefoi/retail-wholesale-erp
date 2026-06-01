@@ -19,10 +19,14 @@ interface StockInDialogProps {
   onClose: () => void;
   item: { id: string; name: string; sku: string; stockQty: number } | null;
   onSuccess: () => void;
+  branches?: { id: string; name: string }[];
+  selectedBranchId?: string | null;
 }
 
-export function StockInDialog({ open, onClose, item, onSuccess }: StockInDialogProps) {
+export function StockInDialog({ open, onClose, item, onSuccess, branches = [], selectedBranchId }: StockInDialogProps) {
+  const isAdmin = branches.length > 0;
   const [qty, setQty] = useState("");
+  const [branchId, setBranchId] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -31,9 +35,11 @@ export function StockInDialog({ open, onClose, item, onSuccess }: StockInDialogP
     if (open) {
       setQty("");
       setError(null);
+      // Pre-select the branch the admin is currently viewing (if a specific one is selected)
+      setBranchId(selectedBranchId ?? "");
       setTimeout(() => inputRef.current?.focus(), 40);
     }
-  }, [open]);
+  }, [open, selectedBranchId]);
 
   const parsedQty = parseInt(qty);
   const newStock = item && parsedQty > 0 ? item.stockQty + parsedQty : null;
@@ -44,10 +50,14 @@ export function StockInDialog({ open, onClose, item, onSuccess }: StockInDialogP
       setError("Please enter a valid positive whole number.");
       return;
     }
+    if (isAdmin && !branchId) {
+      setError("Please select a branch to stock into.");
+      return;
+    }
 
     setIsLoading(true);
     setError(null);
-    const result = await stockIn(item.id, parsedQty);
+    const result = await stockIn(item.id, parsedQty, isAdmin ? branchId : undefined);
     setIsLoading(false);
 
     if (!result.success) {
@@ -75,6 +85,24 @@ export function StockInDialog({ open, onClose, item, onSuccess }: StockInDialogP
 
         {item && (
           <div className="space-y-4 pt-1">
+            {/* Branch selector (admin only) */}
+            {isAdmin && (
+              <div className="space-y-1.5">
+                <Label htmlFor="stock-in-branch">Branch</Label>
+                <select
+                  id="stock-in-branch"
+                  value={branchId}
+                  onChange={(e) => setBranchId(e.target.value)}
+                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+                >
+                  <option value="">— Select branch —</option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* Current stock */}
             <div className="flex items-center justify-between rounded-md bg-slate-50 border border-slate-200 px-3 py-2.5 text-sm">
               <span className="text-slate-500">Current stock</span>

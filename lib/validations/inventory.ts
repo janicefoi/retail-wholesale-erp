@@ -7,10 +7,10 @@ const positiveDecimal = z.coerce
 
 export const ItemSchema = z
   .object({
-    sku: z.string().min(1, "SKU is required").max(50),
-    name: z.string().min(1, "Name is required").max(200),
-    category: z.string().min(1, "Category is required").max(100),
-    description: z.string().max(500).optional(),
+    sku: z.string().trim().min(1, "SKU is required").max(50),
+    name: z.string().trim().min(1, "Name is required").max(200),
+    category: z.string().trim().min(1, "Category is required").max(100),
+    description: z.string().trim().max(500).optional(),
 
     retailPrice: positiveDecimal,
     wholesalePrice: positiveDecimal,
@@ -19,15 +19,20 @@ export const ItemSchema = z
       z.coerce.number().positive("Must be greater than 0").nullable()
     ),
 
+    // Per-branch stock fields — only used when creating/editing for a specific branch
     stockQty: z.coerce
       .number({ invalid_type_error: "Must be a valid number" })
       .int("Must be a whole number")
-      .min(0, "Cannot be negative"),
+      .min(0, "Cannot be negative")
+      .optional()
+      .default(0),
 
     lowStockThreshold: z.coerce
       .number({ invalid_type_error: "Must be a valid number" })
       .int("Must be a whole number")
-      .min(1, "Must be at least 1"),
+      .min(1, "Must be at least 1")
+      .optional()
+      .default(5),
 
     supplierId: z.preprocess(
       (val) => (val === "" || val === null || val === undefined ? null : val),

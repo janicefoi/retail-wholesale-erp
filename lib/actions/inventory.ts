@@ -6,11 +6,20 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { ItemSchema, type ItemFormValues } from "@/lib/validations/inventory";
 
-async function requireManager(): Promise<{ success: false; error: string } | null> {
+async function requireAdmin() {
   const session = await auth();
-  if (!session?.user?.id) return { success: false, error: "Unauthorized" };
+  if (!session?.user?.id) return { success: false as const, error: "Unauthorized" };
+  if (session.user.role !== "ADMIN") {
+    return { success: false as const, error: "Only admins can modify item details." };
+  }
+  return null;
+}
+
+async function requireManager() {
+  const session = await auth();
+  if (!session?.user?.id) return { success: false as const, error: "Unauthorized" };
   if (session.user.role === "CASHIER") {
-    return { success: false, error: "You don't have permission to modify inventory." };
+    return { success: false as const, error: "You don't have permission to modify inventory." };
   }
   return null;
 }
@@ -18,8 +27,6 @@ async function requireManager(): Promise<{ success: false; error: string } | nul
 type ActionResult<T = void> =
   | { success: true; data?: T }
   | { success: false; error: string };
-
-// ── Helpers ────────────────────────────────────────────────────────────────
 
 function categoryToPrefix(category: string): string {
   const alpha = category.replace(/[^a-zA-Z]/g, "");
@@ -35,7 +42,30 @@ export type ItemFilters = {
   lowStock?: boolean;
 };
 
-export async function getItems(filters?: ItemFilters) {
+export type ItemRow = {
+  id: string;
+  sku: string;
+  name: string;
+  category: string;
+  description: string | null;
+  retailPrice: string;
+  wholesalePrice: string;
+  specialPrice: string | null;
+  isActive: boolean;
+  supplierId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  supplier: { id: string; name: string } | null;
+  // Branch-specific stock (null if no BranchStock row yet for this branch)
+  stockQty: number;
+  lowStockThreshold: number;
+};
+
+// branchId: undefined = use session branch; null = combined (sum all); string = specific branch
+export async function getItems(filters?: ItemFilters, branchId?: string | null): Promise<ItemRow[]> {
+  const session = await auth();
+  const effectiveBranchId = branchId !== undefined ? branchId : (session?.user?.branchId ?? null);
+
   const rows = await db.item.findMany({
     where: {
       ...(filters?.search
@@ -49,28 +79,87 @@ export async function getItems(filters?: ItemFilters) {
       ...(filters?.category ? { category: filters.category } : {}),
       ...(filters?.isActive !== undefined ? { isActive: filters.isActive } : {}),
     },
-    include: { supplier: { select: { id: true, name: true } } },
+    include: {
+      supplier: { select: { id: true, name: true } },
+      branchStocks: effectiveBranchId
+        ? { where: { branchId: effectiveBranchId } }
+        : true,
+    },
     orderBy: { name: "asc" },
   });
 
+  const result: ItemRow[] = rows.map((item) => {
+    const stockQty = effectiveBranchId
+      ? (item.branchStocks.find((bs) => bs.branchId === effectiveBranchId)?.stockQty ?? 0)
+      : item.branchStocks.reduce((sum, bs) => sum + bs.stockQty, 0); // combined: sum all
+    const threshold = item.branchStocks[0]?.lowStockThreshold ?? 5;
+    return {
+      id: item.id,
+      sku: item.sku,
+      name: item.name,
+      category: item.category,
+      description: item.description,
+      retailPrice: item.retailPrice.toString(),
+      wholesalePrice: item.wholesalePrice.toString(),
+      specialPrice: item.specialPrice?.toString() ?? null,
+      isActive: item.isActive,
+      supplierId: item.supplierId,
+      createdAt: item.createdAt.toISOString(),
+      updatedAt: item.updatedAt.toISOString(),
+      supplier: item.supplier,
+      stockQty,
+      lowStockThreshold: threshold,
+    };
+  });
+
   if (filters?.lowStock) {
-    return rows.filter((item) => item.stockQty <= item.lowStockThreshold);
+    return result.filter((i) => i.stockQty <= i.lowStockThreshold);
   }
-  return rows;
+  return result;
 }
 
 // ── Items — write ──────────────────────────────────────────────────────────
 
 export async function createItem(data: ItemFormValues): Promise<ActionResult> {
-  const denied = await requireManager();
+  const denied = await requireAdmin();
   if (denied) return denied;
 
+  const session = await auth();
   const parsed = ItemSchema.safeParse(data);
   if (!parsed.success) {
     return { success: false, error: parsed.error.errors[0].message };
   }
+
   try {
-    await db.item.create({ data: parsed.data });
+    const item = await db.item.create({
+      data: {
+        sku: parsed.data.sku,
+        name: parsed.data.name,
+        category: parsed.data.category,
+        description: parsed.data.description,
+        retailPrice: parsed.data.retailPrice,
+        wholesalePrice: parsed.data.wholesalePrice,
+        specialPrice: parsed.data.specialPrice,
+        supplierId: parsed.data.supplierId,
+      },
+    });
+
+    // Create BranchStock for all active branches
+    const branches = await db.branch.findMany({ where: { isActive: true }, select: { id: true } });
+    const userBranchId = session?.user?.branchId;
+
+    for (const branch of branches) {
+      const isUserBranch = branch.id === userBranchId;
+      await db.branchStock.create({
+        data: {
+          itemId: item.id,
+          branchId: branch.id,
+          stockQty: isUserBranch ? (parsed.data.stockQty ?? 0) : 0,
+          lowStockThreshold: parsed.data.lowStockThreshold ?? 5,
+        },
+      });
+    }
+
     revalidatePath("/inventory");
     return { success: true };
   } catch (err: unknown) {
@@ -81,21 +170,40 @@ export async function createItem(data: ItemFormValues): Promise<ActionResult> {
   }
 }
 
-export async function updateItem(
-  id: string,
-  data: ItemFormValues
-): Promise<ActionResult> {
-  const denied = await requireManager();
+export async function updateItem(id: string, data: ItemFormValues): Promise<ActionResult> {
+  const denied = await requireAdmin();
   if (denied) return denied;
 
+  const session = await auth();
   const parsed = ItemSchema.safeParse(data);
   if (!parsed.success) {
     return { success: false, error: parsed.error.errors[0].message };
   }
+
   try {
-    // stockQty is intentionally excluded — use stockIn() to add stock
-    const { stockQty: _ignored, ...updateData } = parsed.data;
-    await db.item.update({ where: { id }, data: updateData });
+    await db.item.update({
+      where: { id },
+      data: {
+        sku: parsed.data.sku,
+        name: parsed.data.name,
+        category: parsed.data.category,
+        description: parsed.data.description,
+        retailPrice: parsed.data.retailPrice,
+        wholesalePrice: parsed.data.wholesalePrice,
+        specialPrice: parsed.data.specialPrice,
+        supplierId: parsed.data.supplierId,
+      },
+    });
+
+    // Update lowStockThreshold for the user's branch
+    const branchId = session?.user?.branchId;
+    if (branchId && parsed.data.lowStockThreshold !== undefined) {
+      await db.branchStock.updateMany({
+        where: { itemId: id, branchId },
+        data: { lowStockThreshold: parsed.data.lowStockThreshold },
+      });
+    }
+
     revalidatePath("/inventory");
     return { success: true };
   } catch (err: unknown) {
@@ -106,12 +214,17 @@ export async function updateItem(
   }
 }
 
-export async function stockIn(
-  itemId: string,
-  quantity: number
-): Promise<ActionResult> {
+export async function stockIn(itemId: string, quantity: number, targetBranchId?: string): Promise<ActionResult> {
   const denied = await requireManager();
   if (denied) return denied;
+
+  const session = await auth();
+  if (!session?.user?.id) return { success: false, error: "Unauthorized" };
+
+  const branchId = session.user.role === "ADMIN"
+    ? (targetBranchId ?? null)
+    : session.user.branchId;
+  if (!branchId) return { success: false, error: session.user.role === "ADMIN" ? "Please select a branch to stock into." : "No branch assigned to your account." };
 
   if (!Number.isInteger(quantity) || quantity <= 0) {
     return { success: false, error: "Quantity must be a positive whole number." };
@@ -125,10 +238,16 @@ export async function stockIn(
     if (!item) return { success: false, error: "Item not found." };
     if (!item.isActive) return { success: false, error: "Cannot stock an inactive item." };
 
-    await db.item.update({
-      where: { id: itemId },
-      data: { stockQty: { increment: quantity } },
-    });
+    await db.$transaction([
+      db.branchStock.upsert({
+        where: { itemId_branchId: { itemId, branchId } },
+        update: { stockQty: { increment: quantity } },
+        create: { itemId, branchId, stockQty: quantity, lowStockThreshold: 5 },
+      }),
+      db.stockLog.create({
+        data: { itemId, quantity, recordedById: session.user.id, branchId },
+      }),
+    ]);
 
     revalidatePath("/inventory");
     return { success: true };
@@ -138,7 +257,7 @@ export async function stockIn(
 }
 
 export async function toggleItemActive(id: string): Promise<ActionResult> {
-  const denied = await requireManager();
+  const denied = await requireAdmin();
   if (denied) return denied;
 
   try {
@@ -156,18 +275,15 @@ export async function toggleItemActive(id: string): Promise<ActionResult> {
 
 export async function generateSku(category: string): Promise<string> {
   const prefix = categoryToPrefix(category);
-
   const existing = await db.item.findMany({
     where: { sku: { startsWith: `${prefix}-` } },
     select: { sku: true },
   });
-
   let maxNum = 0;
   for (const { sku } of existing) {
     const num = parseInt(sku.slice(prefix.length + 1), 10);
     if (!isNaN(num) && num > maxNum) maxNum = num;
   }
-
   return `${prefix}-${String(maxNum + 1).padStart(3, "0")}`;
 }
 
@@ -206,15 +322,10 @@ export async function deleteCategory(id: string): Promise<ActionResult> {
   try {
     const cat = await db.category.findUnique({ where: { id }, select: { name: true } });
     if (!cat) return { success: false, error: "Category not found." };
-
     const usedBy = await db.item.count({ where: { category: cat.name } });
     if (usedBy > 0) {
-      return {
-        success: false,
-        error: `Cannot delete — ${usedBy} item${usedBy === 1 ? "" : "s"} use this category.`,
-      };
+      return { success: false, error: `Cannot delete — ${usedBy} item${usedBy === 1 ? "" : "s"} use this category.` };
     }
-
     await db.category.delete({ where: { id } });
     revalidatePath("/inventory");
     return { success: true };

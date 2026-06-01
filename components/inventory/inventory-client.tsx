@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useMemo, useTransition } from "react";
+import { useState, useMemo, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { getItems } from "@/lib/actions/inventory";
 import {
   Plus, Pencil, Power, AlertTriangle, Search, Package, Tag, Lock,
   PackagePlus, Download, ArrowUpDown, ChevronUp, ChevronDown,
@@ -43,6 +44,7 @@ interface Props {
   suppliers: { id: string; name: string }[];
   categories: Category[];
   userRole: string;
+  branches?: { id: string; name: string }[];
 }
 
 type SortField = "sku" | "name" | "category" | "retailPrice" | "stockQty";
@@ -76,11 +78,27 @@ function SortHeader({
   );
 }
 
-export function InventoryClient({ initialItems, suppliers, categories, userRole }: Props) {
-  const canManage = userRole === "ADMIN" || userRole === "MANAGER";
+export function InventoryClient({ initialItems, suppliers, categories, userRole, branches = [] }: Props) {
+  const isAdmin = userRole === "ADMIN";
+  const isManager = userRole === "MANAGER";
+  const canStockIn = isAdmin || isManager;
+  const canManage = isAdmin; // edit, add, deactivate — admin only
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [pendingToggleId, setPendingToggleId] = useState<string | null>(null);
+
+  // null = combined (admin default), string = specific branch id
+  const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
+  const [items, setItems] = useState<InventoryItem[]>(initialItems);
+  const [isSwitching, setIsSwitching] = useState(false);
+
+  async function handleBranchChange(branchId: string | null) {
+    setSelectedBranchId(branchId);
+    setIsSwitching(true);
+    const result = await getItems(undefined, branchId);
+    setItems(result);
+    setIsSwitching(false);
+  }
 
   // Filters
   const [search, setSearch] = useState("");
@@ -109,7 +127,7 @@ export function InventoryClient({ initialItems, suppliers, categories, userRole 
 
   const filteredItems = useMemo(() => {
     const q = search.toLowerCase();
-    return initialItems.filter((item) => {
+    return items.filter((item) => {
       if (!showInactive && !item.isActive) return false;
       if (lowStockOnly && item.stockQty > item.lowStockThreshold) return false;
       if (categoryFilter !== "all" && item.category !== categoryFilter) return false;
@@ -117,7 +135,7 @@ export function InventoryClient({ initialItems, suppliers, categories, userRole 
         return false;
       return true;
     });
-  }, [initialItems, search, categoryFilter, showInactive, lowStockOnly]);
+  }, [items, search, categoryFilter, showInactive, lowStockOnly]);
 
   const sortedItems = useMemo(() => {
     return [...filteredItems].sort((a, b) => {
@@ -134,10 +152,9 @@ export function InventoryClient({ initialItems, suppliers, categories, userRole 
     });
   }, [filteredItems, sortField, sortDir]);
 
-  // Summary counts (always based on initialItems)
-  const statsActive    = useMemo(() => initialItems.filter((i) => i.isActive).length, [initialItems]);
-  const statsLowStock  = useMemo(() => initialItems.filter((i) => i.isActive && i.stockQty <= i.lowStockThreshold).length, [initialItems]);
-  const statsInactive  = useMemo(() => initialItems.filter((i) => !i.isActive).length, [initialItems]);
+  const statsActive    = useMemo(() => items.filter((i) => i.isActive).length, [items]);
+  const statsLowStock  = useMemo(() => items.filter((i) => i.isActive && i.stockQty <= i.lowStockThreshold).length, [items]);
+  const statsInactive  = useMemo(() => items.filter((i) => !i.isActive).length, [items]);
 
   async function handleToggleActive(id: string) {
     setPendingToggleId(id);
@@ -146,9 +163,11 @@ export function InventoryClient({ initialItems, suppliers, categories, userRole 
     startTransition(() => router.refresh());
   }
 
-  function handleSuccess() {
+  async function handleSuccess() {
     setCreateOpen(false);
     setEditItem(null);
+    const result = await getItems(undefined, isAdmin ? selectedBranchId : undefined);
+    setItems(result);
     startTransition(() => router.refresh());
   }
 
@@ -191,6 +210,25 @@ export function InventoryClient({ initialItems, suppliers, categories, userRole 
   return (
     <div className="space-y-4">
 
+      {/* ── Branch tabs (admin only) ───────────────────────────────────────── */}
+      {isAdmin && branches.length > 0 && (
+        <div className={`flex gap-1 bg-slate-100 rounded-lg p-1 w-fit transition-opacity ${isSwitching ? "opacity-50 pointer-events-none" : ""}`}>
+          {[{ id: null, name: "Combined" }, ...branches.map((b) => ({ id: b.id, name: b.name }))].map((tab) => (
+            <button
+              key={tab.id ?? "combined"}
+              onClick={() => handleBranchChange(tab.id)}
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                selectedBranchId === tab.id
+                  ? "bg-white shadow-sm text-slate-900"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              {tab.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* ── Toolbar ──────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
         <div className="flex flex-1 flex-wrap gap-2 items-center">
@@ -226,7 +264,7 @@ export function InventoryClient({ initialItems, suppliers, categories, userRole 
         </div>
 
         <div className="flex gap-2 shrink-0 items-center">
-          {!canManage && (
+          {!canManage && !isManager && (
             <span className="flex items-center gap-1 text-[11px] text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-1 font-medium">
               <Lock className="h-3 w-3" />
               View only
@@ -350,7 +388,7 @@ export function InventoryClient({ initialItems, suppliers, categories, userRole 
                     </TableCell>
 
                     <TableCell className="whitespace-nowrap">
-                      {canManage ? (
+                      {canStockIn ? (
                         <div className="flex items-center justify-end gap-0.5">
                           <Button
                             size="icon" variant="ghost"
@@ -361,23 +399,27 @@ export function InventoryClient({ initialItems, suppliers, categories, userRole 
                           >
                             <PackagePlus className="h-3 w-3" />
                           </Button>
-                          <Button
-                            size="icon" variant="ghost"
-                            className="h-6 w-6 text-slate-400 hover:text-blue-600"
-                            onClick={() => setEditItem(item)}
-                            title="Edit item"
-                          >
-                            <Pencil className="h-3 w-3" />
-                          </Button>
-                          <Button
-                            size="icon" variant="ghost"
-                            className={cn("h-6 w-6", item.isActive ? "text-slate-300 hover:text-red-500" : "text-slate-300 hover:text-green-600")}
-                            onClick={() => handleToggleActive(item.id)}
-                            disabled={isToggling}
-                            title={item.isActive ? "Deactivate" : "Restore"}
-                          >
-                            <Power className="h-3 w-3" />
-                          </Button>
+                          {canManage && (
+                            <>
+                              <Button
+                                size="icon" variant="ghost"
+                                className="h-6 w-6 text-slate-400 hover:text-blue-600"
+                                onClick={() => setEditItem(item)}
+                                title="Edit item"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                size="icon" variant="ghost"
+                                className={cn("h-6 w-6", item.isActive ? "text-slate-300 hover:text-red-500" : "text-slate-300 hover:text-green-600")}
+                                onClick={() => handleToggleActive(item.id)}
+                                disabled={isToggling}
+                                title={item.isActive ? "Deactivate" : "Restore"}
+                              >
+                                <Power className="h-3 w-3" />
+                              </Button>
+                            </>
+                          )}
                         </div>
                       ) : (
                         <span className="text-slate-200">—</span>
@@ -392,10 +434,10 @@ export function InventoryClient({ initialItems, suppliers, categories, userRole 
       </div>
 
       {/* ── Summary bar ──────────────────────────────────────────────────── */}
-      {initialItems.length > 0 && (
+      {items.length > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
           <span>
-            Showing {sortedItems.length} of {initialItems.length} item{initialItems.length !== 1 ? "s" : ""}
+            Showing {sortedItems.length} of {items.length} item{items.length !== 1 ? "s" : ""}
           </span>
           <div className="flex gap-3">
             <span>{statsActive} active</span>
@@ -412,7 +454,13 @@ export function InventoryClient({ initialItems, suppliers, categories, userRole 
         open={!!stockInItem}
         onClose={() => setStockInItem(null)}
         item={stockInItem}
-        onSuccess={() => { setStockInItem(null); startTransition(() => router.refresh()); }}
+        branches={isAdmin ? branches : []}
+        selectedBranchId={isAdmin ? selectedBranchId : null}
+        onSuccess={async () => {
+          setStockInItem(null);
+          const result = await getItems(undefined, isAdmin ? selectedBranchId : undefined);
+          setItems(result);
+        }}
       />
       <CategoryDialog
         open={categoryDialogOpen}
