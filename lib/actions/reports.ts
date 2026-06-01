@@ -29,18 +29,26 @@ export type ReportData = {
 
 export async function getReportData(
   startDate: string,
-  endDate: string
+  endDate: string,
+  branchId?: string | null
 ): Promise<ReportData> {
   const session = await auth();
   if (!session?.user?.id) return emptyReport();
   if (!["ADMIN", "MANAGER"].includes(session.user.role)) return emptyReport();
+
+  // Non-admins are always scoped to their own branch
+  const effectiveBranchId = session.user.role === "ADMIN" ? (branchId ?? undefined) : session.user.branchId ?? undefined;
 
   const start = new Date(startDate);
   const end = new Date(endDate);
   end.setHours(23, 59, 59, 999);
 
   const sales = await db.sale.findMany({
-    where: { createdAt: { gte: start, lte: end }, isVoid: false },
+    where: {
+      createdAt: { gte: start, lte: end },
+      isVoid: false,
+      ...(effectiveBranchId ? { branchId: effectiveBranchId } : {}),
+    },
     select: {
       id: true,
       receiptNumber: true,

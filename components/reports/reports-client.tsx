@@ -60,30 +60,63 @@ function exportCSV(sales: ReportSale[], startDate: string, endDate: string) {
   URL.revokeObjectURL(url);
 }
 
-export function ReportsClient() {
+interface Props {
+  role: string;
+  branches: { id: string; name: string }[];
+}
+
+export function ReportsClient({ role, branches }: Props) {
+  const isAdmin = role === "ADMIN";
+  const tabs = isAdmin ? [{ id: null, name: "All Branches" }, ...branches.map((b) => ({ id: b.id, name: b.name }))] : [];
+  const [activeBranchId, setActiveBranchId] = useState<string | null>(null);
+
   const today = new Date();
   const [startDate, setStartDate] = useState(toInputDate(startOfMonth(today)));
   const [endDate, setEndDate] = useState(toInputDate(today));
   const [data, setData] = useState<ReportData | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  function fetchData(start: string, end: string) {
+  function fetchData(start: string, end: string, branchId: string | null = activeBranchId) {
     startTransition(async () => {
-      const result = await getReportData(start, end);
+      const result = await getReportData(start, end, branchId);
       setData(result);
     });
   }
 
   useEffect(() => {
-    fetchData(startDate, endDate);
+    fetchData(startDate, endDate, activeBranchId);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleApply() {
     fetchData(startDate, endDate);
   }
 
+  function handleBranchChange(branchId: string | null) {
+    setActiveBranchId(branchId);
+    fetchData(startDate, endDate, branchId);
+  }
+
   return (
     <div className="space-y-6">
+
+      {/* ── Branch tabs (admin only) ───────────────────────────────────────── */}
+      {isAdmin && tabs.length > 0 && (
+        <div className="flex gap-1 bg-slate-100 rounded-lg p-1 w-fit">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id ?? "all"}
+              onClick={() => handleBranchChange(tab.id)}
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                activeBranchId === tab.id
+                  ? "bg-white shadow-sm text-slate-900"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              {tab.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* ── Date range picker ─────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-end gap-3 bg-white border border-slate-200 rounded-xl p-4">
