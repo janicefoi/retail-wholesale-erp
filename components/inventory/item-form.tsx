@@ -113,67 +113,75 @@ export function ItemForm({
       {/* Row 1 — SKU + Name */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <Label htmlFor="sku">SKU *</Label>
-          <div className="flex gap-1.5 mt-1.5">
-            <Input
-              id="sku"
-              placeholder="e.g. ENG-001"
-              {...register("sku")}
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="shrink-0 h-9 w-9"
-              onClick={handleAutoSku}
-              disabled={isGeneratingSku || !categoryValue}
-              title={
-                categoryValue
-                  ? "Auto-generate SKU from category"
-                  : "Select a category first"
-              }
-            >
-              {isGeneratingSku ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Wand2 className="h-3.5 w-3.5" />
-              )}
-            </Button>
-          </div>
-          <p className="text-[11px] text-slate-400 mt-1">
-            Pick a category first, then click the wand to auto-fill
-          </p>
-          <FieldError message={errors.sku?.message} />
+          <Label htmlFor="sku">
+            SKU *
+            {isEditing && <span className="ml-1.5 text-[10px] text-slate-400 font-normal normal-case">(read-only)</span>}
+          </Label>
+          {isEditing ? (
+            <div className="mt-1.5 flex h-9 w-full items-center rounded-md border border-slate-200 bg-slate-50 px-3 font-mono text-sm text-slate-500 select-none">
+              {String(watch("sku") ?? "")}
+            </div>
+          ) : (
+            <>
+              <div className="flex gap-1.5 mt-1.5">
+                <Input id="sku" placeholder="e.g. ENG-001" {...register("sku")} />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="shrink-0 h-9 w-9"
+                  onClick={handleAutoSku}
+                  disabled={isGeneratingSku || !categoryValue}
+                  title={categoryValue ? "Auto-generate SKU from category" : "Select a category first"}
+                >
+                  {isGeneratingSku ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
+                </Button>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">Pick a category first, then click the wand to auto-fill</p>
+              <FieldError message={errors.sku?.message} />
+            </>
+          )}
         </div>
         <div>
-          <Label htmlFor="name">Name *</Label>
-          <Input
-            id="name"
-            placeholder="Item name"
-            className="mt-1.5"
-            {...register("name")}
-          />
-          <FieldError message={errors.name?.message} />
+          <Label htmlFor="name">
+            Name *
+            {isEditing && <span className="ml-1.5 text-[10px] text-slate-400 font-normal normal-case">(read-only)</span>}
+          </Label>
+          {isEditing ? (
+            <div className="mt-1.5 flex h-9 w-full items-center rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-500 select-none truncate">
+              {String(watch("name") ?? "")}
+            </div>
+          ) : (
+            <>
+              <Input id="name" placeholder="Item name" className="mt-1.5" {...register("name")} />
+              <FieldError message={errors.name?.message} />
+            </>
+          )}
         </div>
       </div>
 
       {/* Row 2 — Category + Description */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <Label htmlFor="category">Category *</Label>
-          <select
-            id="category"
-            className={cn(selectClass, "mt-1.5")}
-            {...register("category")}
-          >
-            <option value="">— Select category —</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.name}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <FieldError message={errors.category?.message} />
+          <Label htmlFor="category">
+            Category *
+            {isEditing && <span className="ml-1.5 text-[10px] text-slate-400 font-normal normal-case">(read-only)</span>}
+          </Label>
+          {isEditing ? (
+            <div className="mt-1.5 flex h-9 w-full items-center rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-500 select-none">
+              {String(watch("category") ?? "")}
+            </div>
+          ) : (
+            <>
+              <select id="category" className={cn(selectClass, "mt-1.5")} {...register("category")}>
+                <option value="">— Select category —</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.name}>{c.name}</option>
+                ))}
+              </select>
+              <FieldError message={errors.category?.message} />
+            </>
+          )}
         </div>
         <div>
           <Label htmlFor="description">Description</Label>

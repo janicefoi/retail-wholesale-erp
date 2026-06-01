@@ -1,12 +1,6 @@
-import { Package, AlertTriangle, XCircle, TrendingUp } from "lucide-react";
+import { Package, AlertTriangle, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { InventoryStats } from "@/lib/actions/inventory";
-
-function fmtKES(v: number) {
-  if (v >= 1_000_000) return `KES ${(v / 1_000_000).toFixed(1)}M`;
-  if (v >= 1_000) return `KES ${(v / 1_000).toFixed(0)}K`;
-  return `KES ${v.toLocaleString("en-KE", { minimumFractionDigits: 0 })}`;
-}
 
 export function InventoryStats({ stats }: { stats: InventoryStats }) {
   const cards = [
@@ -30,13 +24,6 @@ export function InventoryStats({ stats }: { stats: InventoryStats }) {
       icon: AlertTriangle,
       color: stats.lowStockItems > 0 ? "text-amber-600" : "text-green-600",
       bg: stats.lowStockItems > 0 ? "bg-amber-50" : "bg-green-50",
-    },
-    {
-      label: "Stock value (wholesale)",
-      value: fmtKES(stats.totalStockValue),
-      icon: TrendingUp,
-      color: "text-slate-700",
-      bg: "bg-slate-50",
     },
   ];
 
