@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useMemo, useTransition, useEffect } from "react";
+import React, { useState, useMemo, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { getItems } from "@/lib/actions/inventory";
+import { getItems, getItemBranchStocks, toggleItemActive, type ItemBranchStock, type InventoryStats } from "@/lib/actions/inventory";
 import {
   Plus, Pencil, Power, AlertTriangle, Search, Package, Tag, Lock,
   PackagePlus, Download, ArrowUpDown, ChevronUp, ChevronDown,
+  ChevronRight, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,10 +14,10 @@ import { Badge } from "@/components/ui/badge";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { toggleItemActive } from "@/lib/actions/inventory";
 import { ItemDialog, type DialogItem } from "@/components/inventory/item-dialog";
 import { CategoryDialog } from "@/components/inventory/category-dialog";
 import { StockInDialog } from "@/components/inventory/stock-in-dialog";
+import { InventoryStats as InventoryStatsBar } from "@/components/inventory/inventory-stats";
 import { cn } from "@/lib/utils";
 
 export type InventoryItem = {
@@ -41,6 +42,7 @@ interface Category { id: string; name: string }
 
 interface Props {
   initialItems: InventoryItem[];
+  initialStats: InventoryStats;
   suppliers: { id: string; name: string }[];
   categories: Category[];
   userRole: string;
@@ -78,33 +80,52 @@ function SortHeader({
   );
 }
 
-export function InventoryClient({ initialItems, suppliers, categories, userRole, branches = [] }: Props) {
+export function InventoryClient({ initialItems, initialStats, suppliers, categories, userRole, branches = [] }: Props) {
   const isAdmin = userRole === "ADMIN";
   const isManager = userRole === "MANAGER";
   const canStockIn = isAdmin || isManager;
-  const canManage = isAdmin; // edit, add, deactivate — admin only
+  const canManage = isAdmin;
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [pendingToggleId, setPendingToggleId] = useState<string | null>(null);
 
-  // null = combined (admin default), string = specific branch id
+  // Branch switching
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
   const [items, setItems] = useState<InventoryItem[]>(initialItems);
+  const [stats, setStats] = useState<InventoryStats>(initialStats);
   const [isSwitching, setIsSwitching] = useState(false);
+
+  // Expand row — per-branch stock
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedStocks, setExpandedStocks] = useState<Record<string, ItemBranchStock[]>>({});
+  const [loadingExpandId, setLoadingExpandId] = useState<string | null>(null);
 
   async function handleBranchChange(branchId: string | null) {
     setSelectedBranchId(branchId);
     setIsSwitching(true);
-    const result = await getItems(undefined, branchId);
+    setExpandedId(null);
+    const [result] = await Promise.all([getItems(undefined, branchId)]);
     setItems(result);
     setIsSwitching(false);
+  }
+
+  async function handleToggleExpand(itemId: string) {
+    if (expandedId === itemId) { setExpandedId(null); return; }
+    setExpandedId(itemId);
+    if (!expandedStocks[itemId]) {
+      setLoadingExpandId(itemId);
+      const stocks = await getItemBranchStocks(itemId);
+      setExpandedStocks((prev) => ({ ...prev, [itemId]: stocks }));
+      setLoadingExpandId(null);
+    }
   }
 
   // Filters
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [supplierFilter, setSupplierFilter] = useState("all");
+  const [stockStatus, setStockStatus] = useState<"all" | "in_stock" | "low" | "out">("all");
   const [showInactive, setShowInactive] = useState(false);
-  const [lowStockOnly, setLowStockOnly] = useState(false);
 
   // Sorting
   const [sortField, setSortField] = useState<SortField>("name");
@@ -129,13 +150,15 @@ export function InventoryClient({ initialItems, suppliers, categories, userRole,
     const q = search.toLowerCase();
     return items.filter((item) => {
       if (!showInactive && !item.isActive) return false;
-      if (lowStockOnly && item.stockQty > item.lowStockThreshold) return false;
       if (categoryFilter !== "all" && item.category !== categoryFilter) return false;
-      if (q && !item.name.toLowerCase().includes(q) && !item.sku.toLowerCase().includes(q))
-        return false;
+      if (supplierFilter !== "all" && item.supplierId !== supplierFilter) return false;
+      if (stockStatus === "out" && item.stockQty !== 0) return false;
+      if (stockStatus === "low" && (item.stockQty === 0 || item.stockQty > item.lowStockThreshold)) return false;
+      if (stockStatus === "in_stock" && item.stockQty <= item.lowStockThreshold) return false;
+      if (q && !item.name.toLowerCase().includes(q) && !item.sku.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [items, search, categoryFilter, showInactive, lowStockOnly]);
+  }, [items, search, categoryFilter, supplierFilter, stockStatus, showInactive]);
 
   const sortedItems = useMemo(() => {
     return [...filteredItems].sort((a, b) => {
@@ -160,12 +183,16 @@ export function InventoryClient({ initialItems, suppliers, categories, userRole,
     setPendingToggleId(id);
     await toggleItemActive(id);
     setPendingToggleId(null);
+    const result = await getItems(undefined, isAdmin ? selectedBranchId : undefined);
+    setItems(result);
     startTransition(() => router.refresh());
   }
 
   async function handleSuccess() {
     setCreateOpen(false);
     setEditItem(null);
+    setExpandedId(null);
+    setExpandedStocks({});
     const result = await getItems(undefined, isAdmin ? selectedBranchId : undefined);
     setItems(result);
     startTransition(() => router.refresh());
@@ -210,6 +237,9 @@ export function InventoryClient({ initialItems, suppliers, categories, userRole,
   return (
     <div className="space-y-4">
 
+      {/* ── Inventory stats ───────────────────────────────────────────────── */}
+      <InventoryStatsBar stats={stats} />
+
       {/* ── Branch tabs (admin only) ───────────────────────────────────────── */}
       {isAdmin && branches.length > 0 && (
         <div className={`flex gap-1 bg-slate-100 rounded-lg p-1 w-fit transition-opacity ${isSwitching ? "opacity-50 pointer-events-none" : ""}`}>
@@ -253,10 +283,30 @@ export function InventoryClient({ initialItems, suppliers, categories, userRole,
             ))}
           </select>
 
-          <label className="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer select-none">
-            <input type="checkbox" checked={lowStockOnly} onChange={(e) => setLowStockOnly(e.target.checked)} className="rounded" />
-            Low stock only
-          </label>
+          {suppliers.length > 0 && (
+            <select
+              value={supplierFilter}
+              onChange={(e) => setSupplierFilter(e.target.value)}
+              className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              <option value="all">All suppliers</option>
+              {suppliers.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          )}
+
+          <select
+            value={stockStatus}
+            onChange={(e) => setStockStatus(e.target.value as typeof stockStatus)}
+            className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            <option value="all">All stock levels</option>
+            <option value="in_stock">In stock</option>
+            <option value="low">Low stock</option>
+            <option value="out">Out of stock</option>
+          </select>
+
           <label className="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer select-none">
             <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} className="rounded" />
             Show inactive
@@ -315,7 +365,7 @@ export function InventoryClient({ initialItems, suppliers, categories, userRole,
                 <TableCell colSpan={9} className="py-10 text-center text-slate-400">
                   <Package className="h-7 w-7 mx-auto mb-1.5 opacity-30" />
                   <p className="text-xs">
-                    {search || categoryFilter !== "all" || lowStockOnly
+                    {search || categoryFilter !== "all" || supplierFilter !== "all" || stockStatus !== "all"
                       ? "No items match your filters."
                       : canManage
                       ? "No items yet — click \"Add item\" to get started."
@@ -329,22 +379,34 @@ export function InventoryClient({ initialItems, suppliers, categories, userRole,
                 const isToggling = pendingToggleId === item.id;
 
                 return (
+                  <React.Fragment key={item.id}>
                   <TableRow
-                    key={item.id}
                     className={cn("transition-colors", !item.isActive && "opacity-50 bg-slate-50")}
                   >
                     <TableCell className="whitespace-nowrap font-mono text-[11px] text-slate-400">
                       {item.sku}
                     </TableCell>
 
-                    {/* Name + supplier */}
+                    {/* Name + supplier — click to expand */}
                     <TableCell className="max-w-0">
-                      <div className="truncate font-medium text-xs text-slate-800" title={item.name}>
-                        {item.name}
-                      </div>
-                      {item.supplier && (
-                        <p className="text-[10px] text-slate-400 truncate">{item.supplier.name}</p>
-                      )}
+                      <button
+                        className="flex items-center gap-1 text-left w-full group"
+                        onClick={() => handleToggleExpand(item.id)}
+                        title={isAdmin ? "Click to see per-branch stock" : undefined}
+                      >
+                        <ChevronRight className={cn(
+                          "h-3 w-3 shrink-0 text-slate-300 transition-transform",
+                          expandedId === item.id && "rotate-90 text-blue-500"
+                        )} />
+                        <div className="min-w-0">
+                          <div className="truncate font-medium text-xs text-slate-800 group-hover:text-blue-600 transition-colors" title={item.name}>
+                            {item.name}
+                          </div>
+                          {item.supplier && (
+                            <p className="text-[10px] text-slate-400 truncate">{item.supplier.name}</p>
+                          )}
+                        </div>
+                      </button>
                     </TableCell>
 
                     <TableCell className="whitespace-nowrap">
@@ -426,6 +488,55 @@ export function InventoryClient({ initialItems, suppliers, categories, userRole,
                       )}
                     </TableCell>
                   </TableRow>
+                  {/* ── Expanded branch stock breakdown ─────────────────── */}
+                  {expandedId === item.id && (
+                    <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
+                      <TableCell colSpan={9} className="py-3 px-6">
+                        {loadingExpandId === item.id ? (
+                          <div className="flex items-center gap-2 text-xs text-slate-400">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            Loading branch stock…
+                          </div>
+                        ) : (
+                          <div className="space-y-1.5">
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-2">
+                              Stock by branch
+                            </p>
+                            <div className="flex flex-wrap gap-3">
+                              {(expandedStocks[item.id] ?? []).map((bs) => {
+                                const isLow = bs.stockQty <= bs.lowStockThreshold;
+                                const isOut = bs.stockQty === 0;
+                                return (
+                                  <div
+                                    key={bs.branchId}
+                                    className={cn(
+                                      "flex items-center gap-2 rounded-lg border px-3 py-2 text-xs",
+                                      isOut ? "border-red-200 bg-red-50" :
+                                      isLow ? "border-amber-200 bg-amber-50" :
+                                              "border-green-200 bg-green-50"
+                                    )}
+                                  >
+                                    <span className="font-medium text-slate-700">{bs.branchName}</span>
+                                    <span className={cn(
+                                      "font-bold tabular-nums",
+                                      isOut ? "text-red-600" : isLow ? "text-amber-600" : "text-green-700"
+                                    )}>
+                                      {isOut ? "OUT" : bs.stockQty}
+                                    </span>
+                                    <span className="text-slate-400">/ min {bs.lowStockThreshold}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            {item.description && (
+                              <p className="text-xs text-slate-500 mt-2 italic">{item.description}</p>
+                            )}
+                          </div>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  </React.Fragment>
                 );
               })
             )}
@@ -474,6 +585,7 @@ export function InventoryClient({ initialItems, suppliers, categories, userRole,
         suppliers={suppliers}
         categories={categories}
         onSuccess={handleSuccess}
+        isAdmin={isAdmin}
       />
       <ItemDialog
         open={!!editItem}
@@ -482,6 +594,7 @@ export function InventoryClient({ initialItems, suppliers, categories, userRole,
         suppliers={suppliers}
         categories={categories}
         onSuccess={handleSuccess}
+        isAdmin={isAdmin}
       />
     </div>
   );

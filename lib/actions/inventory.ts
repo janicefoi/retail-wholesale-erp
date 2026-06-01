@@ -195,11 +195,10 @@ export async function updateItem(id: string, data: ItemFormValues): Promise<Acti
       },
     });
 
-    // Update lowStockThreshold for the user's branch
-    const branchId = session?.user?.branchId;
-    if (branchId && parsed.data.lowStockThreshold !== undefined) {
+    // Update lowStockThreshold across all branches for this item
+    if (parsed.data.lowStockThreshold !== undefined) {
       await db.branchStock.updateMany({
-        where: { itemId: id, branchId },
+        where: { itemId: id },
         data: { lowStockThreshold: parsed.data.lowStockThreshold },
       });
     }
@@ -269,6 +268,69 @@ export async function toggleItemActive(id: string): Promise<ActionResult> {
   } catch {
     return { success: false, error: "Failed to update item status." };
   }
+}
+
+// ── Inventory stats ────────────────────────────────────────────────────────
+
+export type InventoryStats = {
+  totalActive: number;
+  outOfStock: number;
+  lowStockItems: number;
+  totalStockValue: number;
+};
+
+export async function getInventoryStats(branchId?: string | null): Promise<InventoryStats> {
+  const session = await auth();
+  const effectiveBranchId = branchId !== undefined ? branchId : (session?.user?.branchId ?? null);
+
+  const items = await db.item.findMany({
+    where: { isActive: true },
+    select: {
+      wholesalePrice: true,
+      branchStocks: effectiveBranchId
+        ? { where: { branchId: effectiveBranchId }, select: { stockQty: true, lowStockThreshold: true } }
+        : { select: { stockQty: true, lowStockThreshold: true } },
+    },
+  });
+
+  let outOfStock = 0, lowStockItems = 0, totalStockValue = 0;
+  for (const item of items) {
+    const qty = item.branchStocks.reduce((s, bs) => s + bs.stockQty, 0);
+    const threshold = item.branchStocks[0]?.lowStockThreshold ?? 5;
+    if (qty === 0) outOfStock++;
+    else if (qty <= threshold) lowStockItems++;
+    totalStockValue += Number(item.wholesalePrice) * qty;
+  }
+
+  return { totalActive: items.length, outOfStock, lowStockItems, totalStockValue };
+}
+
+// ── Per-branch stock breakdown (for expand row) ────────────────────────────
+
+export type ItemBranchStock = {
+  branchId: string;
+  branchName: string;
+  stockQty: number;
+  lowStockThreshold: number;
+};
+
+export async function getItemBranchStocks(itemId: string): Promise<ItemBranchStock[]> {
+  const rows = await db.branchStock.findMany({
+    where: { itemId },
+    select: {
+      branchId: true,
+      stockQty: true,
+      lowStockThreshold: true,
+      branch: { select: { name: true } },
+    },
+    orderBy: { branch: { name: "asc" } },
+  });
+  return rows.map((r) => ({
+    branchId: r.branchId,
+    branchName: r.branch.name,
+    stockQty: r.stockQty,
+    lowStockThreshold: r.lowStockThreshold,
+  }));
 }
 
 // ── SKU generation ─────────────────────────────────────────────────────────

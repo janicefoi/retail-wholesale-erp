@@ -38,6 +38,7 @@ interface ItemDialogProps {
   suppliers: { id: string; name: string }[];
   categories: Category[];
   onSuccess: () => void;
+  isAdmin?: boolean;
 }
 
 export function ItemDialog({
@@ -47,6 +48,7 @@ export function ItemDialog({
   suppliers,
   categories,
   onSuccess,
+  isAdmin = false,
 }: ItemDialogProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -104,6 +106,7 @@ export function ItemDialog({
           onCancel={onClose}
           submitLabel={isEditing ? "Save changes" : "Create item"}
           isEditing={isEditing}
+          isAdmin={isAdmin}
         />
       </DialogContent>
     </Dialog>

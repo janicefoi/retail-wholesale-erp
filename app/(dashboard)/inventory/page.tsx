@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { getItems } from "@/lib/actions/inventory";
+import { getItems, getInventoryStats } from "@/lib/actions/inventory";
 import { getBranches } from "@/lib/actions/branches";
 import { InventoryClient } from "@/components/inventory/inventory-client";
 
@@ -11,16 +11,18 @@ export default async function InventoryPage() {
   const role = session?.user?.role ?? "CASHIER";
   const isAdmin = role === "ADMIN";
 
-  const [items, suppliers, categories, branches] = await Promise.all([
-    getItems(undefined, isAdmin ? null : undefined), // admin gets combined view initially
+  const [items, suppliers, categories, branches, stats] = await Promise.all([
+    getItems(undefined, isAdmin ? null : undefined),
     db.supplier.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
     db.category.findMany({ orderBy: { name: "asc" } }),
     isAdmin ? getBranches() : Promise.resolve([]),
+    getInventoryStats(isAdmin ? null : undefined),
   ]);
 
   return (
     <InventoryClient
       initialItems={items}
+      initialStats={stats}
       suppliers={suppliers}
       categories={categories}
       userRole={role}

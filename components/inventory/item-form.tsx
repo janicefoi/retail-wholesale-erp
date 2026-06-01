@@ -32,6 +32,7 @@ interface ItemFormProps {
   onCancel: () => void;
   submitLabel?: string;
   isEditing?: boolean;
+  isAdmin?: boolean;
 }
 
 function FieldError({ message }: { message?: string }) {
@@ -62,6 +63,7 @@ export function ItemForm({
   onCancel,
   submitLabel = "Save item",
   isEditing = false,
+  isAdmin = false,
 }: ItemFormProps) {
   const [isGeneratingSku, setIsGeneratingSku] = useState(false);
 
@@ -240,10 +242,10 @@ export function ItemForm({
       </div>
 
       {/* Row 4 — Stock + Threshold + Supplier */}
-      <div className={`grid gap-4 ${isEditing ? "grid-cols-2" : "grid-cols-3"}`}>
-        {!isEditing && (
+      <div className={`grid gap-4 ${isEditing || isAdmin ? "grid-cols-2" : "grid-cols-3"}`}>
+        {!isEditing && !isAdmin && (
           <div>
-            <Label htmlFor="stockQty">Initial Stock Quantity *</Label>
+            <Label htmlFor="stockQty">Initial Stock Quantity</Label>
             <Input
               id="stockQty"
               type="number"
@@ -253,6 +255,11 @@ export function ItemForm({
               {...register("stockQty")}
             />
             <FieldError message={errors.stockQty?.message} />
+          </div>
+        )}
+        {!isEditing && isAdmin && (
+          <div className="col-span-2 rounded-md bg-blue-50 border border-blue-100 px-3 py-2 text-xs text-blue-700">
+            Item will be added with 0 stock across all branches. Use the <strong>Stock In</strong> button on each branch to add quantities after saving.
           </div>
         )}
         <div>
