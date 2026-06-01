@@ -38,12 +38,14 @@ export const authConfig: NextAuthConfig = {
       if (user) {
         token.id = user.id;
         token.role = (user as { role: string }).role;
+        token.branchId = (user as { branchId?: string | null }).branchId ?? null;
       }
       return token;
     },
     session({ session, token }) {
       session.user.id = token.id as string;
       session.user.role = token.role as string;
+      session.user.branchId = (token.branchId ?? null) as string | null;
       return session;
     },
   },

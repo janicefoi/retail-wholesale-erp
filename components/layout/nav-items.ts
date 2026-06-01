@@ -1,10 +1,13 @@
 import {
+  LayoutDashboard,
   ShoppingCart,
   Package,
   Users,
   Truck,
   BarChart3,
   UserCog,
+  ClipboardList,
+  GitBranch,
   type LucideIcon,
 } from "lucide-react";
 
@@ -17,10 +20,16 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   {
+    label: "Dashboard",
+    href: "/dashboard",
+    icon: LayoutDashboard,
+    roles: ["ADMIN", "MANAGER", "CASHIER"],
+  },
+  {
     label: "Point of Sale",
     href: "/pos",
     icon: ShoppingCart,
-    roles: ["ADMIN", "MANAGER", "CASHIER"],
+    roles: ["MANAGER", "CASHIER"],
   },
   {
     label: "Inventory",
@@ -52,6 +61,18 @@ export const NAV_ITEMS: NavItem[] = [
     icon: UserCog,
     roles: ["ADMIN"],
   },
+  {
+    label: "Audit Log",
+    href: "/admin/audit-log",
+    icon: ClipboardList,
+    roles: ["ADMIN"],
+  },
+  {
+    label: "Branches",
+    href: "/admin/branches",
+    icon: GitBranch,
+    roles: ["ADMIN"],
+  },
 ];
 
 export const PAGE_TITLES: Record<string, string> = {
@@ -62,6 +83,8 @@ export const PAGE_TITLES: Record<string, string> = {
   "/suppliers": "Suppliers",
   "/reports": "Reports",
   "/admin/employees": "Employees",
+  "/admin/audit-log": "Audit Log",
+  "/admin/branches": "Branches",
 };
 
 export const ROLE_LABELS: Record<string, string> = {

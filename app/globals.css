@@ -69,8 +69,15 @@
   * {
     @apply border-border;
   }
+  html,
   body {
     @apply bg-background text-foreground;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar {
+    display: none;
   }
 }
 
@@ -87,5 +94,20 @@
     left: 0;
     top: 0;
     width: 302px;
+  }
+  .customer-statement-print {
+    display: block !important;
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 32px;
+    background: white;
+    font-family: sans-serif;
+    color: #0f172a;
+  }
+  .customer-statement-print,
+  .customer-statement-print * {
+    visibility: visible;
   }
 }
