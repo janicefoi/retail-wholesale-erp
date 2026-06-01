@@ -3,8 +3,6 @@
 import { startOfDay, endOfDay } from "date-fns";
 import { db } from "@/lib/db";
 
-// ── Types ─────────────────────────────────────────────────────────────────
-
 export type DashboardMetrics = {
   todayRevenue: number;
   todaySalesCount: number;
@@ -32,24 +30,24 @@ export type LowStockAlert = {
   lowStockThreshold: number;
 };
 
-// ── Actions ───────────────────────────────────────────────────────────────
-
-export async function getDashboardMetrics(): Promise<DashboardMetrics> {
+export async function getDashboardMetrics(branchId?: string | null): Promise<DashboardMetrics> {
   const now = new Date();
   const start = startOfDay(now);
   const end = endOfDay(now);
 
-  const [todaySales, creditAgg, activeItems] = await Promise.all([
+  const branchFilter = branchId ? { branchId } : {};
+
+  const [todaySales, creditAgg, branchStocks] = await Promise.all([
     db.sale.findMany({
-      where: { createdAt: { gte: start, lte: end }, isVoid: false },
+      where: { createdAt: { gte: start, lte: end }, isVoid: false, ...branchFilter },
       select: { totalAmount: true },
     }),
     db.customer.aggregate({
       _sum: { creditBalance: true },
-      where: { creditBalance: { gt: 0 } },
+      where: { creditBalance: { gt: 0 }, ...branchFilter },
     }),
-    db.item.findMany({
-      where: { isActive: true },
+    db.branchStock.findMany({
+      where: branchId ? { branchId, item: { isActive: true } } : { item: { isActive: true } },
       select: { stockQty: true, lowStockThreshold: true },
     }),
   ]);
@@ -57,15 +55,17 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
   return {
     todayRevenue: todaySales.reduce((s, sale) => s + Number(sale.totalAmount), 0),
     todaySalesCount: todaySales.length,
-    lowStockCount: activeItems.filter((i) => i.stockQty <= i.lowStockThreshold).length,
+    lowStockCount: branchStocks.filter((bs) => bs.stockQty <= bs.lowStockThreshold).length,
     totalOutstandingCredit: Number(creditAgg._sum.creditBalance ?? 0),
   };
 }
 
-export async function getRecentSales(): Promise<RecentSale[]> {
+export async function getRecentSales(branchId?: string | null): Promise<RecentSale[]> {
+  const branchFilter = branchId ? { branchId } : {};
   const sales = await db.sale.findMany({
     take: 10,
     orderBy: { createdAt: "desc" },
+    where: branchFilter,
     select: {
       id: true,
       receiptNumber: true,
@@ -81,11 +81,33 @@ export async function getRecentSales(): Promise<RecentSale[]> {
   return JSON.parse(JSON.stringify(sales));
 }
 
-export async function getLowStockAlerts(): Promise<LowStockAlert[]> {
-  const items = await db.item.findMany({
-    where: { isActive: true },
-    select: { id: true, sku: true, name: true, stockQty: true, lowStockThreshold: true },
+export async function getLowStockAlerts(branchId?: string | null): Promise<LowStockAlert[]> {
+  const stocks = await db.branchStock.findMany({
+    where: branchId ? { branchId, item: { isActive: true } } : { item: { isActive: true } },
+    select: {
+      stockQty: true,
+      lowStockThreshold: true,
+      item: { select: { id: true, sku: true, name: true } },
+    },
     orderBy: { stockQty: "asc" },
   });
-  return items.filter((i) => i.stockQty <= i.lowStockThreshold).slice(0, 10);
+
+  return stocks
+    .filter((bs) => bs.stockQty <= bs.lowStockThreshold)
+    .slice(0, 10)
+    .map((bs) => ({
+      id: bs.item.id,
+      sku: bs.item.sku,
+      name: bs.item.name,
+      stockQty: bs.stockQty,
+      lowStockThreshold: bs.lowStockThreshold,
+    }));
+}
+
+export async function getBranches() {
+  return db.branch.findMany({
+    where: { isActive: true },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
 }
