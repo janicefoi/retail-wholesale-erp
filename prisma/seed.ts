@@ -4,32 +4,35 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function main() {
-  // ── Admin user ──────────────────────────────────────────────────────────
+  // ── Branches ────────────────────────────────────────────────────────────
+  const branch1 = await prisma.branch.upsert({
+    where: { id: "seed-branch-001" },
+    update: { name: "Mukai Branch", address: "PO BOX 4901 Eldoret Mukai", phone: "0722560051/0763560052", paybill: "315469", pin: "P0S1656847U" },
+    create: { id: "seed-branch-001", name: "Mukai Branch", address: "PO BOX 4901 Eldoret Mukai", phone: "0722560051/0763560052", paybill: "315469", pin: "P0S1656847U" },
+  });
+  const branch2 = await prisma.branch.upsert({
+    where: { id: "seed-branch-002" },
+    update: { name: "Zulu Arcade Branch", address: "PO BOX 30100 ELD Zulu Arcade", phone: "0712891212/0722560051", paybill: "858018", pin: "P0S1656847U" },
+    create: { id: "seed-branch-002", name: "Zulu Arcade Branch", address: "PO BOX 30100 ELD Zulu Arcade", phone: "0712891212/0722560051", paybill: "858018", pin: "P0S1656847U" },
+  });
+  console.log(`✓ Branches: ${branch1.name}, ${branch2.name}`);
+
+  // ── Admin user (no branch — sees all) ──────────────────────────────────
   const passwordHash = await bcrypt.hash("admin123", 12);
   const admin = await prisma.user.upsert({
     where: { email: "admin@jsh.co.ke" },
     update: {},
-    create: { name: "JSH Admin", email: "admin@jsh.co.ke", passwordHash, role: Role.ADMIN },
+    create: { name: "JSH Admin", email: "admin@jsh.co.ke", passwordHash, role: Role.ADMIN, branchId: null },
   });
   console.log(`✓ Admin user: ${admin.email}`);
 
   // ── Categories ─────────────────────────────────────────────────────────
   const categoryNames = [
-    "Engine Parts",
-    "Electrical",
-    "Brakes",
-    "Tyres & Tubes",
-    "Oils & Lubricants",
-    "Body Parts",
-    "Transmission",
-    "Filters",
+    "Engine Parts", "Electrical", "Brakes", "Tyres & Tubes",
+    "Oils & Lubricants", "Body Parts", "Transmission", "Filters",
   ];
   for (const name of categoryNames) {
-    await prisma.category.upsert({
-      where: { name },
-      update: {},
-      create: { name },
-    });
+    await prisma.category.upsert({ where: { name }, update: {}, create: { name } });
   }
   console.log(`✓ ${categoryNames.length} categories seeded`);
 
@@ -40,7 +43,7 @@ async function main() {
     create: {
       id: "seed-supplier-001",
       name: "Mombasa Auto Spares Ltd",
-      phone: "+254712000001",
+      phone: "0712000001",
       email: "orders@mombasaautospares.co.ke",
       address: "Mombasa Road, Industrial Area, Nairobi",
       notes: "Primary supplier — net 30 payment terms",
@@ -48,77 +51,42 @@ async function main() {
   });
   console.log(`✓ Supplier: ${supplier.name}`);
 
-  // ── Items ───────────────────────────────────────────────────────────────
-  const items = [
-    {
-      sku: "ENG-001",
-      name: "Piston Ring Set — Honda CG125",
-      category: "Engine Parts",
-      description: "Standard bore piston ring set for Honda CG125 engines",
-      retailPrice: 850,
-      wholesalePrice: 700,
-      specialPrice: 620,
-      stockQty: 48,
-      lowStockThreshold: 10,
-      supplierId: supplier.id,
-    },
-    {
-      sku: "ENG-002",
-      name: "Cylinder Head Gasket — Yamaha FZ",
-      category: "Engine Parts",
-      description: "OEM-spec cylinder head gasket for Yamaha FZ series",
-      retailPrice: 650,
-      wholesalePrice: 520,
-      specialPrice: 470,
-      stockQty: 30,
-      lowStockThreshold: 8,
-      supplierId: supplier.id,
-    },
-    {
-      sku: "BRA-001",
-      name: "Brake Pad Set — Front (Universal)",
-      category: "Brakes",
-      description: "Semi-metallic front brake pads, fits most 125–200cc bikes",
-      retailPrice: 420,
-      wholesalePrice: 330,
-      specialPrice: 290,
-      stockQty: 60,
-      lowStockThreshold: 15,
-      supplierId: supplier.id,
-    },
-    {
-      sku: "ELE-001",
-      name: "CDI Unit — Honda CB150",
-      category: "Electrical",
-      description: "Digital CDI ignition unit for Honda CB150",
-      retailPrice: 1_200,
-      wholesalePrice: 980,
-      specialPrice: null,
-      stockQty: 12,
-      lowStockThreshold: 4,
-      supplierId: supplier.id,
-    },
-    {
-      sku: "OIL-001",
-      name: "Engine Oil 20W-50 — 1 Litre",
-      category: "Oils & Lubricants",
-      description: "Mineral engine oil, suitable for all 4-stroke motorcycle engines",
-      retailPrice: 380,
-      wholesalePrice: 300,
-      specialPrice: null,
-      stockQty: 120,
-      lowStockThreshold: 20,
-      supplierId: supplier.id,
-    },
+  // ── Items + BranchStock ─────────────────────────────────────────────────
+  const itemSeeds = [
+    { sku: "ENG-001", name: "Piston Ring Set — Honda CG125",    category: "Engine Parts",       retailPrice: 850,   wholesalePrice: 700,  specialPrice: 620,  b1Qty: 48,  b2Qty: 20, threshold: 10 },
+    { sku: "ENG-002", name: "Cylinder Head Gasket — Yamaha FZ", category: "Engine Parts",       retailPrice: 650,   wholesalePrice: 520,  specialPrice: 470,  b1Qty: 30,  b2Qty: 15, threshold: 8  },
+    { sku: "BRA-001", name: "Brake Pad Set — Front (Universal)",category: "Brakes",             retailPrice: 420,   wholesalePrice: 330,  specialPrice: 290,  b1Qty: 60,  b2Qty: 40, threshold: 15 },
+    { sku: "ELE-001", name: "CDI Unit — Honda CB150",           category: "Electrical",         retailPrice: 1200,  wholesalePrice: 980,  specialPrice: null, b1Qty: 12,  b2Qty: 8,  threshold: 4  },
+    { sku: "OIL-001", name: "Engine Oil 20W-50 — 1 Litre",     category: "Oils & Lubricants",  retailPrice: 380,   wholesalePrice: 300,  specialPrice: null, b1Qty: 120, b2Qty: 60, threshold: 20 },
   ];
 
-  for (const item of items) {
-    const created = await prisma.item.upsert({
-      where: { sku: item.sku },
+  for (const seed of itemSeeds) {
+    const item = await prisma.item.upsert({
+      where: { sku: seed.sku },
       update: {},
-      create: item,
+      create: {
+        sku: seed.sku,
+        name: seed.name,
+        category: seed.category,
+        retailPrice: seed.retailPrice,
+        wholesalePrice: seed.wholesalePrice,
+        specialPrice: seed.specialPrice,
+        supplierId: supplier.id,
+      },
     });
-    console.log(`✓ Item [${created.sku}]: ${created.name}`);
+
+    await prisma.branchStock.upsert({
+      where: { itemId_branchId: { itemId: item.id, branchId: branch1.id } },
+      update: {},
+      create: { itemId: item.id, branchId: branch1.id, stockQty: seed.b1Qty, lowStockThreshold: seed.threshold },
+    });
+    await prisma.branchStock.upsert({
+      where: { itemId_branchId: { itemId: item.id, branchId: branch2.id } },
+      update: {},
+      create: { itemId: item.id, branchId: branch2.id, stockQty: seed.b2Qty, lowStockThreshold: seed.threshold },
+    });
+
+    console.log(`✓ Item [${item.sku}]: ${item.name} (B1: ${seed.b1Qty}, B2: ${seed.b2Qty})`);
   }
 
   console.log("\nSeed completed successfully.");
