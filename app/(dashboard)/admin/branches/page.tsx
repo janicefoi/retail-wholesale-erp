@@ -1,9 +1,9 @@
-import { redirect } from "next/navigation";
+﻿import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { getBranches } from "@/lib/actions/branches";
 import { BranchesClient } from "@/components/admin/branches-client";
 
-export const metadata = { title: "Branches — JSH ERP" };
+export const metadata = { title: "Branches | JSH ERP" };
 
 export default async function BranchesPage() {
   const session = await auth();
@@ -21,3 +21,4 @@ export default async function BranchesPage() {
     </div>
   );
 }
+

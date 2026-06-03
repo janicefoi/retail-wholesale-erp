@@ -1,9 +1,9 @@
-import { auth } from "@/auth";
+﻿import { auth } from "@/auth";
 import { getCustomers, getCustomerStats } from "@/lib/actions/customers";
 import { getBranches } from "@/lib/actions/branches";
 import { CustomersClient } from "@/components/customers/customers-client";
 
-export const metadata = { title: "Customers — JSH ERP" };
+export const metadata = { title: "Customers | JSH ERP" };
 
 export default async function CustomersPage() {
   const session = await auth();
@@ -18,3 +18,4 @@ export default async function CustomersPage() {
 
   return <CustomersClient customers={customers} role={role} branches={branches} initialStats={stats} />;
 }
+

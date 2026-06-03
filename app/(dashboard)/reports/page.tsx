@@ -1,9 +1,9 @@
-import { redirect } from "next/navigation";
+﻿import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { getBranches } from "@/lib/actions/branches";
 import { ReportsClient } from "@/components/reports/reports-client";
 
-export const metadata = { title: "Reports — JSH ERP" };
+export const metadata = { title: "Reports | JSH ERP" };
 
 export default async function ReportsPage() {
   const session = await auth();
@@ -22,3 +22,4 @@ export default async function ReportsPage() {
     </div>
   );
 }
+

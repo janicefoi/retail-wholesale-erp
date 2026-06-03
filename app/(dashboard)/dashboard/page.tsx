@@ -1,4 +1,4 @@
-import { ShoppingCart, AlertTriangle } from "lucide-react";
+﻿import { ShoppingCart, AlertTriangle } from "lucide-react";
 import { auth } from "@/auth";
 import {
   getDashboardMetrics, getRecentSales, getLowStockAlerts,
@@ -8,7 +8,7 @@ import { MetricCard } from "@/components/dashboard/metric-card";
 import { LowStockList } from "@/components/dashboard/low-stock-list";
 import { BranchDashboard } from "@/components/dashboard/branch-dashboard";
 
-export const metadata = { title: "Dashboard — JSH ERP" };
+export const metadata = { title: "Dashboard | JSH ERP" };
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -93,3 +93,4 @@ export default async function DashboardPage() {
     </div>
   );
 }
+

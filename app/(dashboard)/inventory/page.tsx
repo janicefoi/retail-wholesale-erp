@@ -1,10 +1,10 @@
-import { auth } from "@/auth";
+﻿import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { getItems, getInventoryStats } from "@/lib/actions/inventory";
 import { getBranches } from "@/lib/actions/branches";
 import { InventoryClient } from "@/components/inventory/inventory-client";
 
-export const metadata = { title: "Inventory — JSH ERP" };
+export const metadata = { title: "Inventory | JSH ERP" };
 
 export default async function InventoryPage() {
   const session = await auth();
@@ -30,3 +30,4 @@ export default async function InventoryPage() {
     />
   );
 }
+

@@ -1,9 +1,9 @@
-import { redirect } from "next/navigation";
+﻿import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { getAuditLogs } from "@/lib/actions/audit";
 import { AuditLogClient } from "@/components/audit/audit-log-client";
 
-export const metadata = { title: "Audit Log — JSH ERP" };
+export const metadata = { title: "Audit Log | JSH ERP" };
 
 export default async function AuditLogPage() {
   const session = await auth();
@@ -23,3 +23,4 @@ export default async function AuditLogPage() {
     </div>
   );
 }
+

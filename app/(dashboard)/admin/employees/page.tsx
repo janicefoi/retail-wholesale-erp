@@ -1,10 +1,10 @@
-import { redirect } from "next/navigation";
+﻿import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { getEmployees } from "@/lib/actions/employees";
 import { getBranches } from "@/lib/actions/branches";
 import { EmployeesClient } from "@/components/admin/employees-client";
 
-export const metadata = { title: "Employees — JSH ERP" };
+export const metadata = { title: "Employees | JSH ERP" };
 
 export default async function EmployeesPage() {
   const session = await auth();
@@ -22,3 +22,4 @@ export default async function EmployeesPage() {
     </div>
   );
 }
+
