@@ -6,7 +6,7 @@ Built as a real-world client solution and presented here as a portfolio piece de
 
 ---
 
-> **Screenshots needed:** A hero banner or collage showing the dashboard, POS, and receipt would go here.
+![Admin Dashboard](screenshots/AdminDashboard-Screenshot.png)
 
 ---
 
@@ -31,37 +31,37 @@ Built as a real-world client solution and presented here as a portfolio piece de
 
 ### Point of Sale
 
-> **Screenshot needed:** The full POS interface — item search open, cart with multiple items, customer attached, and sale type toggled.
+![Point of Sale](screenshots/POS-Screenshot.png)
 
 - Live item search by name or SKU (debounced, up to 15 results, branch-scoped)
 - Three dynamic price tiers per item: **Retail**, **Wholesale**, and **Special** (special is optional; POS hides it for items where it isn't configured)
 - Sale type switcher — all cart prices update instantly when switching between retail and wholesale
 - Attach a customer to any sale; mark the sale as **Paid** or **On Credit**
-- Discount input at checkout
+- Discount input and amount-given field with live change calculation
 - Stock validation before completing a sale — the server checks branch stock and rejects the sale if any item is unavailable
 - Atomic sale completion: creates the sale record, decrements branch stock, and updates the customer credit balance in a single database transaction
 
 **Thermal receipt printing**
 
-> **Screenshot needed:** The receipt print-preview modal, showing the formatted 80mm receipt with QR code.
+![Receipt](screenshots/Receipt-Screenshot1.png)
 
-- Unique receipt number in format `RCP-YYYYMMDD-XXXX` (e.g. `RCP-20240601-0042`)
-- Shop header: name, address, phone
-- Cashier name, date, and time
-- Itemised list with quantities and unit prices (price snapshot — historic receipts are never affected by future price changes)
-- Subtotal, discount, extracted VAT (16% Kenya VAT), and total
-- Customer name and credit status (on credit sales)
-- QR code
+- Unique receipt number in format `RCP-YYYYMMDD-XXXX` (e.g. `RCP-20260601-0042`)
+- Shop header: name, address, phone — pulled from the branch that made the sale
+- Served-by name, date, and time
+- Itemised list with SKU, quantities, and unit prices (price snapshot — historic receipts are never affected by future price changes)
+- Subtotal (ex-VAT), extracted VAT (16% Kenya VAT), total, discount, and change
+- Customer name and credit status on credit sales
+- QR code linking to the branch WhatsApp number
+- VAT code footer: `CODE V: VAT= 16%  CODE E: EXEMPT= 0%`
 
 ---
 
 ### Dashboard
 
-> **Screenshot needed:** Admin dashboard showing the multi-branch comparison view with revenue bar charts and top-items/top-debtors cards.
-
-> **Screenshot needed:** Non-admin (Manager/Cashier) dashboard showing the single-branch quick stats and low-stock alert list.
-
 **Admin view — multi-branch comparison**
+
+![Admin Dashboard](screenshots/AdminDashboard-Screenshot.png)
+
 - System-wide totals at a glance
 - Per-branch cards, each showing:
   - Today's revenue and sales count
@@ -71,7 +71,10 @@ Built as a real-world client solution and presented here as a portfolio piece de
   - Top 5 selling items by quantity
   - Top 5 debtors by credit balance
 
-**Non-admin view — single branch**
+**Manager / Cashier view — single branch**
+
+![Manager Dashboard](screenshots/ManagerDashboard-Screenshot.png)
+
 - Today's sales count and total revenue
 - Low-stock alert list (item name, current quantity vs. threshold)
 
@@ -79,7 +82,7 @@ Built as a real-world client solution and presented here as a portfolio piece de
 
 ### Inventory Management
 
-> **Screenshot needed:** Inventory page — stats cards at the top, item table with expanded row showing branch stock levels.
+![Inventory](screenshots/Inventory-Screenshot.png)
 
 - Summary stats: total items, active items, low-stock count
 - Add and update items with SKU, category, description, supplier link, and three price tiers
@@ -94,35 +97,43 @@ Built as a real-world client solution and presented here as a portfolio piece de
 
 ### Customer Management
 
-> **Screenshot needed:** Customer list with the stats row (total customers, customers with credit, total outstanding credit, new this month) and the credit-filter tabs.
-
-> **Screenshot needed:** Customer detail page showing contact info, credit balance, sales history table, and the "Record Payment" button.
+![Customers](screenshots/Customer-Screenshot.png)
 
 - Customer records with name, phone, address, and branch
 - Summary stats: total customers, customers with outstanding credit, total credit owed, new this month
 - Filter by credit status: All / Has Credit / No Credit
-- **Customer detail page** — complete purchase history (receipt number, type, status, total, date) and full credit payment history including the name of the employee who recorded each payment
-- **Record credit payment** — atomic transaction: creates the payment record and decrements the customer's balance simultaneously
 - Branch-scoped: non-admin users only see customers from their branch
+
+**Customer detail page**
+
+![Customer Detail](screenshots/CustomerDetail-Screenshot.png)
+
+- Complete purchase history (receipt number, type, status, total, date)
+- Full credit payment history including the employee who recorded each payment
+- **Record credit payment** — atomic transaction: creates the payment record and decrements the customer's balance simultaneously
 
 ---
 
 ### Supplier Management
 
-> **Screenshot needed:** Supplier list with stats cards (total suppliers, items supplied, total purchase orders, total spend).
-
-> **Screenshot needed:** Supplier detail page showing items supplied table and purchase order history.
+![Suppliers](screenshots/Suppliers-Screenshot.png)
 
 - Supplier records: name, phone, email, address, notes
 - Summary stats: total suppliers, total items sourced, total purchase orders, total spend (calculated from cost prices)
-- **Record Purchase Order** — select supplier, item (scoped to that supplier), quantity, and cost price; atomically creates the order and increments branch stock
-- **Supplier detail page** — lists all items supplied (with SKU, category, prices, current stock) and the full purchase order history (quantity, cost, date, recorder name)
+- **Record Purchase Order** — add multiple line items in one order; atomically creates each order line and increments branch stock
+
+**Supplier detail page**
+
+![Supplier Detail](screenshots/SupplierDetails-Screenshot.png)
+
+- Lists all items supplied (with SKU, category, prices, current stock)
+- Full purchase order history (quantity, cost, date, recorder name)
 
 ---
 
 ### Reports
 
-> **Screenshot needed:** Reports page with date-range picker selected, revenue summary cards, and the sales table with a void button visible.
+![Reports](screenshots/Report-Screenshot.png)
 
 - Role-gated: **Manager and Admin only**
 - Filter sales by custom date range
@@ -136,7 +147,7 @@ Built as a real-world client solution and presented here as a portfolio piece de
 
 ### Employee Management
 
-> **Screenshot needed:** Employee management page with the employee table showing roles, branch assignments, active status, and sales stats.
+![Employees](screenshots/Employees-Screenshot.png)
 
 - Admin-only access
 - Create employee accounts with role assignment: **Cashier**, **Manager**, or **Admin**
@@ -149,7 +160,7 @@ Built as a real-world client solution and presented here as a portfolio piece de
 
 ### Branch Management
 
-> **Screenshot needed:** Branch management page showing branch cards with employee/customer/sales counts.
+![Branches](screenshots/Branch-Screenshot.png)
 
 - Admin-only access
 - Create and manage store locations: name, address, phone, Paybill number, PIN
@@ -160,7 +171,7 @@ Built as a real-world client solution and presented here as a portfolio piece de
 
 ### Audit Log
 
-> **Screenshot needed:** Audit log table with a few rows showing credit payment entries and stock-in entries.
+![Audit Log](screenshots/AuditLog-Screenshotpng.png)
 
 - Admin-only access
 - Immutable trail of all credit payment recordings and stock-in events
@@ -257,6 +268,7 @@ Supporting: `Branch`, `Category`, `StockLog`
 │   ├── constants/                # Shop info, VAT rate
 │   └── db.ts                     # Prisma client singleton
 ├── prisma/schema.prisma
+├── screenshots/                  # Feature screenshots
 ├── auth.ts                       # NextAuth config
 ├── auth.config.ts                # Edge-safe config (for middleware)
 └── middleware.ts                 # Route protection + role guards
@@ -295,6 +307,7 @@ npm run dev
 | `npm run db:migrate` | Create a new migration |
 | `npm run db:studio` | Open Prisma Studio |
 | `npm run db:seed` | Seed database with sample data |
+| `npm run db:reset` | Wipe all data except admin user and branches |
 
 ---
 
