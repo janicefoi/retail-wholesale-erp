@@ -9,6 +9,7 @@ import type { SaleResult } from "@/lib/actions/pos";
 
 export function POSClient() {
   const [completedSale, setCompletedSale] = useState<SaleResult | null>(null);
+  const [amountGiven, setAmountGiven] = useState<number>(0);
 
   // Rehydrate the cart from localStorage after mount (skipHydration: true in store
   // prevents the SSR/client mismatch that would otherwise cause a hydration error).
@@ -26,14 +27,15 @@ export function POSClient() {
 
       {/* ── Right: Active order ───────────────────────────────────── */}
       <div className="w-[380px] shrink-0 flex flex-col overflow-hidden bg-white">
-        <CartPanel onSaleComplete={setCompletedSale} />
+        <CartPanel onSaleComplete={(sale, given) => { setCompletedSale(sale); setAmountGiven(given); }} />
       </div>
 
       {/* ── Receipt modal (shown after successful sale) ───────────── */}
       {completedSale && (
         <ReceiptModal
           saleId={completedSale.id}
-          onClose={() => setCompletedSale(null)}
+          amountGiven={amountGiven}
+          onClose={() => { setCompletedSale(null); setAmountGiven(0); }}
         />
       )}
     </div>

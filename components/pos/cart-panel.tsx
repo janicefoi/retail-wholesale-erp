@@ -18,12 +18,13 @@ function fmt(v: number) {
 }
 
 interface CartPanelProps {
-  onSaleComplete: (sale: SaleResult) => void;
+  onSaleComplete: (sale: SaleResult, amountGiven: number) => void;
 }
 
 export function CartPanel({ onSaleComplete }: CartPanelProps) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [amountGiven, setAmountGiven] = useState<number>(0);
   const [showRestored, setShowRestored] = useState(false);
   // Start as true to match SSR; corrected on mount via effect
   const [isOnline, setIsOnline] = useState(true);
@@ -127,7 +128,8 @@ export function CartPanel({ onSaleComplete }: CartPanelProps) {
         }
 
         clearCart();
-        onSaleComplete(result.sale);
+        setAmountGiven(0);
+        onSaleComplete(result.sale, amountGiven);
       } catch {
         setIsOnline(false);
         setError("Connection lost during sale — your cart is saved. Please try again when reconnected.");
@@ -262,6 +264,45 @@ export function CartPanel({ onSaleComplete }: CartPanelProps) {
             <p className="text-[10px] text-red-600 text-right">{discountError}</p>
           )}
         </div>
+
+        {/* Amount given — only for cash/paid sales */}
+        {paymentStatus === "PAID" && (
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide shrink-0">
+                Amount Given
+              </label>
+              <div className="ml-auto flex items-center gap-1">
+                <span className="text-xs text-slate-400">KES</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={amountGiven || ""}
+                  onChange={(e) => setAmountGiven(parseFloat(e.target.value) || 0)}
+                  placeholder="0.00"
+                  className={cn(
+                    "w-24 text-right text-xs tabular-nums px-2 py-1 rounded-md border focus:outline-none focus:ring-1",
+                    amountGiven > 0 && amountGiven < tot
+                      ? "border-red-400 focus:ring-red-400 bg-red-50"
+                      : "border-slate-200 focus:ring-ring"
+                  )}
+                />
+              </div>
+            </div>
+            {amountGiven > 0 && amountGiven < tot && (
+              <p className="text-[10px] text-red-600 text-right">
+                Amount given is less than total
+              </p>
+            )}
+            {amountGiven >= tot && tot > 0 && (
+              <div className="flex justify-between text-xs font-semibold text-green-700 bg-green-50 rounded-md px-2 py-1.5">
+                <span>Change</span>
+                <span className="tabular-nums">{fmt(amountGiven - tot)}</span>
+              </div>
+            )}
+          </div>
+        )}
 
         <Separator />
 
