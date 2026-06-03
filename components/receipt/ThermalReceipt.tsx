@@ -66,12 +66,12 @@ export function ThermalReceipt({ sale, amountGiven = 0 }: ThermalReceiptProps) {
   return (
     <div className="thermal-receipt-print" style={base}>
 
-      {/* ── Logo placeholder ─────────────────────────────────────────────
-          Replace the div below with:
-          <Image src="/logo.png" alt="logo" width={60} height={60} style={{ margin: "0 auto 4px" }} />
-          once the logo file is added to /public
-      ──────────────────────────────────────────────────────────────── */}
-      <div style={{ textAlign: "center", fontSize: "22px", marginBottom: "2px" }}>🏍</div>
+      {/* ── Logo ─────────────────────────────────────────────────────── */}
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: "6px" }}>
+        <div style={{ backgroundColor: "#38bdf8", borderRadius: "6px", padding: "4px 10px", display: "inline-block" }}>
+          <img src="/logo.svg" alt="JSH" style={{ width: "160px", height: "55px", display: "block" }} />
+        </div>
+      </div>
 
       {/* ── Shop header ───────────────────────────────────────────────── */}
       <div style={{ textAlign: "center", fontWeight: "bold", fontSize: "13px", letterSpacing: "0.5px" }}>

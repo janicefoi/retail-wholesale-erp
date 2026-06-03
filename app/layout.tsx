@@ -7,7 +7,10 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "JSH Motorcycle Spare Parts",
-  description: "ERP system for JSH Motorcycle Spare Parts — Nairobi, Kenya",
+  description: "ERP system for JSH Motorcycle Spare Parts — Eldoret, Kenya",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export default function RootLayout({

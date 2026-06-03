@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Logo } from "@/components/ui/logo";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { LogOut } from "lucide-react";
@@ -61,21 +62,9 @@ function SidebarContent({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Company name */}
-      <div className="px-4 py-5">
-        <div className="flex items-center gap-2.5">
-          <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-blue-500 flex items-center justify-center">
-            <span className="text-white font-bold text-sm">J</span>
-          </div>
-          <div className="min-w-0">
-            <p className="text-white font-semibold text-sm leading-tight truncate">
-              JSH Motorcycle
-            </p>
-            <p className="text-slate-400 text-xs leading-tight truncate">
-              Spare Parts
-            </p>
-          </div>
-        </div>
+      {/* Logo */}
+      <div className="px-4 py-4">
+        <Logo width={188} height={65} />
       </div>
 
       <Separator className="bg-[hsl(var(--sidebar-border))]" />

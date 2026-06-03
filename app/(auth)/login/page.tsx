@@ -1,7 +1,8 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
+import { Logo } from "@/components/ui/logo";
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
@@ -36,13 +37,10 @@ export default function LoginPage() {
 
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-600 mb-4">
-            <span className="text-white font-bold text-xl">J</span>
+          <div className="inline-block bg-sky-500 rounded-2xl px-5 py-3 mb-4">
+            <Logo width={230} height={80} />
           </div>
-          <h1 className="text-xl font-bold text-slate-900 leading-tight">
-            JSH Motorcycle Spare Parts
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">Sign in to continue</p>
+          <p className="text-sm text-slate-500">Sign in to continue</p>
         </div>
 
         {/* Card */}
@@ -157,3 +155,4 @@ export default function LoginPage() {
     </div>
   );
 }
+
