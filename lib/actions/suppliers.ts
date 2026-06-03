@@ -185,32 +185,34 @@ export async function recordPurchaseOrder(
 
   try {
     await db.$transaction(async (tx) => {
-      const item = await tx.item.findUnique({
-        where: { id: parsed.data.itemId },
-        select: { supplierId: true, name: true, isActive: true },
-      });
-      if (!item) throw new Error("Item not found.");
-      if (!item.isActive) throw new Error("Cannot restock an inactive item.");
-      if (item.supplierId !== parsed.data.supplierId) {
-        throw new Error("This item does not belong to the selected supplier.");
+      for (const line of parsed.data.items) {
+        const item = await tx.item.findUnique({
+          where: { id: line.itemId },
+          select: { supplierId: true, name: true, isActive: true },
+        });
+        if (!item) throw new Error(`Item not found.`);
+        if (!item.isActive) throw new Error(`"${item.name}" is inactive and cannot be restocked.`);
+        if (item.supplierId !== parsed.data.supplierId) {
+          throw new Error(`"${item.name}" does not belong to this supplier.`);
+        }
+
+        await tx.purchaseOrder.create({
+          data: {
+            supplierId: parsed.data.supplierId,
+            itemId: line.itemId,
+            quantity: line.quantity,
+            costPrice: line.costPrice,
+            recordedById: session.user.id,
+            branchId,
+          },
+        });
+
+        await tx.branchStock.upsert({
+          where: { itemId_branchId: { itemId: line.itemId, branchId } },
+          update: { stockQty: { increment: line.quantity } },
+          create: { itemId: line.itemId, branchId, stockQty: line.quantity, lowStockThreshold: 5 },
+        });
       }
-
-      await tx.purchaseOrder.create({
-        data: {
-          supplierId: parsed.data.supplierId,
-          itemId: parsed.data.itemId,
-          quantity: parsed.data.quantity,
-          costPrice: parsed.data.costPrice,
-          recordedById: session.user.id,
-          branchId,
-        },
-      });
-
-      await tx.branchStock.upsert({
-        where: { itemId_branchId: { itemId: parsed.data.itemId, branchId } },
-        update: { stockQty: { increment: parsed.data.quantity } },
-        create: { itemId: parsed.data.itemId, branchId, stockQty: parsed.data.quantity, lowStockThreshold: 5 },
-      });
     });
 
     revalidatePath(`/suppliers/${parsed.data.supplierId}`);
