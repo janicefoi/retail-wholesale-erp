@@ -21,18 +21,23 @@ export const SupplierSchema = z.object({
 
 export type SupplierInput = z.infer<typeof SupplierSchema>;
 
-export const PurchaseOrderSchema = z.object({
-  supplierId: z.string().min(1),
-  itemId: z.string().min(1, "Please select an item"),
+const PurchaseLineSchema = z.object({
+  itemId: z.string().min(1, "Select an item"),
   quantity: z
     .number({ invalid_type_error: "Enter a valid quantity" })
     .int()
-    .positive("Quantity must be at least 1")
+    .positive("Must be at least 1")
     .max(99999, "Quantity seems unusually large"),
   costPrice: z
     .number({ invalid_type_error: "Enter a valid price" })
-    .positive("Cost price must be greater than zero"),
-  branchId: z.string().nullable().optional(),
+    .positive("Must be greater than zero"),
 });
 
+export const PurchaseOrderSchema = z.object({
+  supplierId: z.string().min(1),
+  branchId: z.string().nullable().optional(),
+  items: z.array(PurchaseLineSchema).min(1, "Add at least one item"),
+});
+
+export type PurchaseLineInput = z.infer<typeof PurchaseLineSchema>;
 export type PurchaseOrderInput = z.infer<typeof PurchaseOrderSchema>;
