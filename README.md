@@ -1,4 +1,4 @@
-# JSH Motorcycle Spare Parts — ERP System
+# ERP System
 
 A full-stack, production-grade Enterprise Resource Planning (ERP) system built with **TypeScript** end-to-end. Designed for a small-to-medium retail and wholesale motorcycle spare parts business, it covers the complete operational lifecycle — point of sale, inventory, supplier procurement, customer credit tracking, multi-branch management, and admin reporting.
 
@@ -42,8 +42,6 @@ Built as a real-world client solution and presented here as a portfolio piece de
 - Atomic sale completion: creates the sale record, decrements branch stock, and updates the customer credit balance in a single database transaction
 
 **Thermal receipt printing**
-
-![Receipt](screenshots/Receipt-Screenshot1.png)
 
 - Unique receipt number in format `RCP-YYYYMMDD-XXXX` (e.g. `RCP-20260601-0042`)
 - Shop header: name, address, phone — pulled from the branch that made the sale
