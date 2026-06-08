@@ -1,7 +1,13 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { VoidReceiptDialog } from "@/components/sales/void-receipt-dialog";
 import type { RecentSale } from "@/lib/actions/dashboard";
 import { cn } from "@/lib/utils";
 
@@ -18,9 +24,13 @@ function fmtKES(v: string | number) {
 
 interface Props {
   sales: RecentSale[];
+  isAdmin?: boolean;
 }
 
-export function RecentSalesTable({ sales }: Props) {
+export function RecentSalesTable({ sales, isAdmin }: Props) {
+  const router = useRouter();
+  const [voidTarget, setVoidTarget] = useState<{ saleId: string; receiptNumber: string } | null>(null);
+
   return (
     <div>
       <h2 className="text-sm font-semibold text-slate-700 mb-3">Recent sales</h2>
@@ -87,6 +97,15 @@ export function RecentSalesTable({ sales }: Props) {
                       <Badge className="text-[10px] font-medium border px-1.5 py-0 bg-red-50 text-red-600 border-red-200">
                         VOID
                       </Badge>
+                    ) : isAdmin ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-2 text-[10px] font-medium text-red-500 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => setVoidTarget({ saleId: sale.id, receiptNumber: sale.receiptNumber })}
+                      >
+                        Void
+                      </Button>
                     ) : (
                       <span className="text-[10px] text-slate-300">—</span>
                     )}
@@ -97,6 +116,16 @@ export function RecentSalesTable({ sales }: Props) {
           </TableBody>
         </Table>
       </div>
+
+      {voidTarget && (
+        <VoidReceiptDialog
+          saleId={voidTarget.saleId}
+          receiptNumber={voidTarget.receiptNumber}
+          open={true}
+          onOpenChange={(open) => { if (!open) setVoidTarget(null); }}
+          onSuccess={() => router.refresh()}
+        />
+      )}
     </div>
   );
 }

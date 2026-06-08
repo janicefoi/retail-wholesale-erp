@@ -161,7 +161,7 @@ export function BranchDashboard({ userName, branches, combined, branchData }: Pr
       </div>
 
       {/* ── Recent sales (combined only) ─────────────────────────────────── */}
-      {isCombined && <RecentSalesTable sales={combined.sales} />}
+      {isCombined && <RecentSalesTable sales={combined.sales} isAdmin />}
     </div>
   );
 }
