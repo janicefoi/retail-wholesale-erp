@@ -2,14 +2,14 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { format, startOfMonth } from "date-fns";
-import { Download, Loader2, BarChart3 } from "lucide-react";
+import { Download, Loader2, BarChart3, TrendingUp, ShoppingCart } from "lucide-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { MetricCard } from "@/components/dashboard/metric-card";
-import { TrendingUp, ShoppingCart } from "lucide-react";
+import { VoidReceiptDialog } from "@/components/sales/void-receipt-dialog";
 import { getReportData, type ReportData, type ReportSale } from "@/lib/actions/reports";
 import { cn } from "@/lib/utils";
 
@@ -28,22 +28,34 @@ function toInputDate(d: Date) {
   return format(d, "yyyy-MM-dd");
 }
 
-function exportCSV(sales: ReportSale[], startDate: string, endDate: string) {
-  const headers = [
-    "Receipt #", "Date", "Cashier", "Customer",
-    "Sale Type", "Total (KES)", "Tax (KES)", "Discount (KES)", "Payment",
-  ];
-  const rows = sales.map((s) => [
-    s.receiptNumber,
-    fmtDateTime(s.createdAt),
-    s.employee.name,
-    s.customer?.name ?? "",
-    s.saleType,
-    Number(s.totalAmount).toFixed(2),
-    Number(s.taxAmount).toFixed(2),
-    Number(s.discountAmount).toFixed(2),
-    s.paymentStatus,
-  ]);
+function exportCSV(sales: ReportSale[], startDate: string, endDate: string, canViewRevenue: boolean) {
+  const headers = canViewRevenue
+    ? [
+        "Receipt #", "Date", "Cashier", "Customer",
+        "Sale Type", "Total (KES)", "Tax (KES)", "Discount (KES)", "Payment",
+      ]
+    : ["Receipt #", "Date", "Cashier", "Customer", "Sale Type", "Payment"];
+
+  const rows = sales.map((s) => {
+    const row = [
+      s.receiptNumber,
+      fmtDateTime(s.createdAt),
+      s.employee.name,
+      s.customer?.name ?? "",
+      s.saleType,
+    ];
+
+    if (canViewRevenue) {
+      row.push(
+        Number(s.totalAmount ?? 0).toFixed(2),
+        Number(s.taxAmount ?? 0).toFixed(2),
+        Number(s.discountAmount ?? 0).toFixed(2)
+      );
+    }
+
+    row.push(s.paymentStatus);
+    return row;
+  });
 
   const csv = [headers, ...rows]
     .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
@@ -75,6 +87,7 @@ export function ReportsClient({ role, branches }: Props) {
   const [endDate, setEndDate] = useState(toInputDate(today));
   const [data, setData] = useState<ReportData | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [voidTarget, setVoidTarget] = useState<{ saleId: string; receiptNumber: string } | null>(null);
 
   function fetchData(start: string, end: string, branchId: string | null = activeBranchId) {
     startTransition(async () => {
@@ -154,7 +167,7 @@ export function ReportsClient({ role, branches }: Props) {
             variant="outline"
             size="sm"
             className="gap-1.5 self-end ml-auto"
-            onClick={() => exportCSV(data.sales, startDate, endDate)}
+            onClick={() => exportCSV(data.sales, startDate, endDate, data.canViewRevenue)}
           >
             <Download className="h-3.5 w-3.5" />
             Export CSV
@@ -166,14 +179,16 @@ export function ReportsClient({ role, branches }: Props) {
       {data && (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-            <div className="lg:col-span-2">
-              <MetricCard
-                title="Total revenue"
-                value={fmtKES(data.totalRevenue)}
-                icon={TrendingUp}
-                color="blue"
-              />
-            </div>
+            {data.canViewRevenue && (
+              <div className="lg:col-span-2">
+                <MetricCard
+                  title="Total revenue"
+                  value={fmtKES(data.totalRevenue ?? 0)}
+                  icon={TrendingUp}
+                  color="blue"
+                />
+              </div>
+            )}
             <div>
               <MetricCard
                 title="Sales count"
@@ -182,24 +197,28 @@ export function ReportsClient({ role, branches }: Props) {
                 color="green"
               />
             </div>
-            <div>
-              <MetricCard
-                title="Retail revenue"
-                value={fmtKES(data.revenueByType.RETAIL)}
-                icon={BarChart3}
-                color="blue"
-                subtitle="Retail"
-              />
-            </div>
-            <div>
-              <MetricCard
-                title="Wholesale revenue"
-                value={fmtKES(data.revenueByType.WHOLESALE)}
-                icon={BarChart3}
-                color="amber"
-                subtitle="Wholesale"
-              />
-            </div>
+            {data.canViewRevenue && data.revenueByType && (
+              <>
+                <div>
+                  <MetricCard
+                    title="Retail revenue"
+                    value={fmtKES(data.revenueByType.RETAIL)}
+                    icon={BarChart3}
+                    color="blue"
+                    subtitle="Retail"
+                  />
+                </div>
+                <div>
+                  <MetricCard
+                    title="Wholesale revenue"
+                    value={fmtKES(data.revenueByType.WHOLESALE)}
+                    icon={BarChart3}
+                    color="amber"
+                    subtitle="Wholesale"
+                  />
+                </div>
+              </>
+            )}
           </div>
 
           {/* ── Sales table ─────────────────────────────────────────────── */}
@@ -216,14 +235,17 @@ export function ReportsClient({ role, branches }: Props) {
                     <TableHead className="w-28">Cashier</TableHead>
                     <TableHead className="w-28">Customer</TableHead>
                     <TableHead className="w-20 whitespace-nowrap">Type</TableHead>
-                    <TableHead className="w-32 text-right whitespace-nowrap">Total</TableHead>
+                    {data.canViewRevenue && (
+                      <TableHead className="w-32 text-right whitespace-nowrap">Total</TableHead>
+                    )}
                     <TableHead className="w-20 whitespace-nowrap">Payment</TableHead>
+                    {isAdmin && <TableHead className="w-16" />}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {data.sales.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="py-10 text-center text-xs text-slate-400">
+                      <TableCell colSpan={(data.canViewRevenue ? 7 : 6) + (isAdmin ? 1 : 0)} className="py-10 text-center text-xs text-slate-400">
                         No sales found for the selected date range.
                       </TableCell>
                     </TableRow>
@@ -249,9 +271,11 @@ export function ReportsClient({ role, branches }: Props) {
                             {sale.saleType}
                           </span>
                         </TableCell>
-                        <TableCell className="text-right text-xs font-semibold tabular-nums text-slate-800">
-                          {fmtKES(Number(sale.totalAmount))}
-                        </TableCell>
+                        {data.canViewRevenue && (
+                          <TableCell className="text-right text-xs font-semibold tabular-nums text-slate-800">
+                            {fmtKES(Number(sale.totalAmount ?? 0))}
+                          </TableCell>
+                        )}
                         <TableCell>
                           <Badge
                             className={cn(
@@ -264,6 +288,18 @@ export function ReportsClient({ role, branches }: Props) {
                             {sale.paymentStatus}
                           </Badge>
                         </TableCell>
+                        {isAdmin && (
+                          <TableCell>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 px-2 text-[10px] font-medium text-red-500 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => setVoidTarget({ saleId: sale.id, receiptNumber: sale.receiptNumber })}
+                            >
+                              Void
+                            </Button>
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))
                   )}
@@ -279,6 +315,16 @@ export function ReportsClient({ role, branches }: Props) {
           <Loader2 className="h-5 w-5 animate-spin" />
           <span className="text-sm">Loading report…</span>
         </div>
+      )}
+
+      {voidTarget && (
+        <VoidReceiptDialog
+          saleId={voidTarget.saleId}
+          receiptNumber={voidTarget.receiptNumber}
+          open={true}
+          onOpenChange={(open) => { if (!open) setVoidTarget(null); }}
+          onSuccess={() => fetchData(startDate, endDate)}
+        />
       )}
     </div>
   );

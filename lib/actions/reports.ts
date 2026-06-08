@@ -10,9 +10,9 @@ export type ReportSale = {
   receiptNumber: string;
   saleType: string;
   paymentStatus: string;
-  totalAmount: string;
-  taxAmount: string;
-  discountAmount: string;
+  totalAmount?: string;
+  taxAmount?: string;
+  discountAmount?: string;
   createdAt: string;
   customer: { name: string } | null;
   employee: { name: string };
@@ -20,9 +20,10 @@ export type ReportSale = {
 
 export type ReportData = {
   sales: ReportSale[];
-  totalRevenue: number;
   salesCount: number;
-  revenueByType: { RETAIL: number; WHOLESALE: number; SPECIAL: number };
+  canViewRevenue: boolean;
+  totalRevenue?: number;
+  revenueByType?: { RETAIL: number; WHOLESALE: number; SPECIAL: number };
 };
 
 // ── Action ────────────────────────────────────────────────────────────────
@@ -38,17 +39,42 @@ export async function getReportData(
 
   // Non-admins are always scoped to their own branch
   const effectiveBranchId = session.user.role === "ADMIN" ? (branchId ?? undefined) : session.user.branchId ?? undefined;
+  const canViewRevenue = session.user.role === "ADMIN";
 
   const start = new Date(startDate);
   const end = new Date(endDate);
   end.setHours(23, 59, 59, 999);
 
+  const where = {
+    createdAt: { gte: start, lte: end },
+    isVoid: false,
+    ...(effectiveBranchId ? { branchId: effectiveBranchId } : {}),
+  };
+
+  if (!canViewRevenue) {
+    const sales = await db.sale.findMany({
+      where,
+      select: {
+        id: true,
+        receiptNumber: true,
+        saleType: true,
+        paymentStatus: true,
+        createdAt: true,
+        customer: { select: { name: true } },
+        employee: { select: { name: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return {
+      sales: JSON.parse(JSON.stringify(sales)),
+      salesCount: sales.length,
+      canViewRevenue,
+    };
+  }
+
   const sales = await db.sale.findMany({
-    where: {
-      createdAt: { gte: start, lte: end },
-      isVoid: false,
-      ...(effectiveBranchId ? { branchId: effectiveBranchId } : {}),
-    },
+    where,
     select: {
       id: true,
       receiptNumber: true,
@@ -76,12 +102,13 @@ export async function getReportData(
 
   return {
     sales: JSON.parse(JSON.stringify(sales)),
-    totalRevenue,
     salesCount: sales.length,
+    canViewRevenue,
+    totalRevenue,
     revenueByType,
   };
 }
 
 function emptyReport(): ReportData {
-  return { sales: [], totalRevenue: 0, salesCount: 0, revenueByType: { RETAIL: 0, WHOLESALE: 0, SPECIAL: 0 } };
+  return { sales: [], salesCount: 0, canViewRevenue: false };
 }
